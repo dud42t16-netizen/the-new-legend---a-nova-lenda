@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<title>Torre do Cavaleiro</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; user-select: none; }
+    body { background: #111; overflow: hidden; width: 100vw; height: 100vh; }
+    canvas { display: block; position: absolute; top: 0; left: 0; }
+
+    /* Controles mobile */
+    #mobileControls {
+        display: none;
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        pointer-events: none;
+        z-index: 10;
+    }
+
+    #joystickZone {
+        position: absolute;
+        bottom: 30px;
+        left: 30px;
+        width: 130px;
+        height: 130px;
+        pointer-events: auto;
+    }
+
+    #joystickBase {
+        width: 130px;
+        height: 130px;
+        background: rgba(255,255,255,0.12);
+        border: 2px solid rgba(255,255,255,0.25);
+        border-radius: 50%;
+        position: absolute;
+    }
+
+    #joystickKnob {
+        width: 60px;
+        height: 60px;
+        background: rgba(255,255,255,0.35);
+        border-radius: 50%;
+        position: absolute;
+        top: 35px;
+        left: 35px;
+        transition: none;
+    }
+
+    #fireBtn {
+        position: absolute;
+        bottom: 40px;
+        right: 30px;
+        width: 80px;
+        height: 80px;
+        background: rgba(255, 80, 0, 0.35);
+        border: 2px solid rgba(255, 150, 50, 0.6);
+        border-radius: 50%;
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #ffcc88;
+        font-size: 13px;
+        font-weight: bold;
+        text-align: center;
+        line-height: 1.2;
+    }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="mobileControls">
+    <div id="joystickZone">
+        <div id="joystickBase"></div>
+        <div id="joystickKnob"></div>
+    </div>
+    <div id="fireBtn">FOGO</div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Detecta se é mobile
+const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+if (isMobile) {
+    document.getElementById('mobileControls').style.display = 'block';
+}
+
+// ===== TEMAS =====
+const floors = [
+    { name: "Andar 1 - Pedra Antiga", bg: "#2a2a2a", ground: "#3d3d3d", accent: "#555", enemy: "#111" },
+    { name: "Andar 2 - Floresta Sombria", bg: "#0d1f0d", ground: "#1a331a", accent: "#2d5a2d", enemy: "#0a1a0a" },
+    { name: "Andar 3 - Caverna de Cristal", bg: "#1a0a2e", ground: "#2a1a4e", accent: "#5a3a8a", enemy: "#0f0520" },
+    { name: "Andar 4 - Inferno", bg: "#2a0a0a", ground: "#4a1515", accent: "#8a3030", enemy: "#1a0505" },
+    { name: "Andar 5 - Gelo Eterno", bg: "#0a1a2a", ground: "#1a2a3a", accent: "#3a5a7a", enemy: "#051015" },
+    { name: "Andar 6 - Ruínas Douradas", bg: "#2a1f0a", ground: "#3d2e10", accent: "#8a6a20", enemy: "#1a1205" },
+    { name: "Andar 7 - Vazio", bg: "#050505", ground: "#121212", accent: "#333", enemy: "#000" },
+    { name: "Andar 8 - Sangue", bg: "#1a0000", ground: "#2a0505", accent: "#5a1010", enemy: "#0f0000" }
+];
+
+// ===== ESTADO =====
+let currentFloor = 0;
+let killsNeeded = 20;
+let kills = 0;
+let totalKills = 0;
+let enemySpeed = 0.55;
+let maxEnemies = 4;
+let gameState = 'playing';
+
+// ===== JOGADOR =====
+const player = {
+    x: 0, y: 0, size: 36, speed: 4.3,
+    hp: 10,
+    maxHp: 10,               // começa com 10
+    angle: 0,
+    attackCooldown: 0,
+    fireCooldown: 0,
+    slashTimer: 0
+};
+
+// ===== ARRAYS =====
+let enemies = [];
+let fireballs = [];
+let particles = [];
+
+const ENEMY_SIZE = 28;
+const RESPAWN_TIME = 220;
+
+// ===== CONTROLES =====
+const keys = {};
+let mouse = { left: false, right: false };
+
+// Joystick
+let joyActive = false;
+let joyDX = 0;
+let joyDY = 0;
+const joyKnob = document.getElementById('joystickKnob');
+const joyZone = document.getElementById('joystickZone');
+
+// ===== FUNÇÕES =====
+function getTheme() {
+    return floors[Math.min(currentFloor, floors.length - 1)];
+}
+
+function spawnEnemy() {
+    const side = Math.floor(Math.random() * 4);
+    let x, y;
+    if (side === 0) { x = Math.random() * canvas.width; y = -ENEMY_SIZE - 10; }
+    else if (side === 1) { x = canvas.width + ENEMY_SIZE + 10; y = Math.random() * canvas.height; }
+    else if (side === 2) { x = Math.random() * canvas.width; y = canvas.height + ENEMY_SIZE + 10; }
+    else { x = -ENEMY_SIZE - 10; y = Math.random() * canvas.height; }
+
+    enemies.push({
+        x, y, size: ENEMY_SIZE,
+        alive: true,
+        respawnTimer: 0,
+        anim: Math.random() * Math.PI * 2
+    });
+}
+
+function createFireball() {
+    if (player.fireCooldown > 0) return;
+    const speed = 9.5;
+    fireballs.push({
+        x: player.x + player.size / 2,
+        y: player.y + player.size / 2,
+        vx: Math.cos(player.angle) * speed,
+        vy: Math.sin(player.angle) * speed,
+        size: 13,
+        life: 85
+    });
+    player.fireCooldown = 28;
+}
+
+function swordAttack() {
+    if (player.attackCooldown > 0) return;
+    player.attackCooldown = 22;
+    player.slashTimer = 12;
+
+    const range = 68;
+    const attackX = player.x + player.size / 2 + Math.cos(player.angle) * (range * 0.7);
+    const attackY = player.y + player.size / 2 + Math.sin(player.angle) * (range * 0.7);
+
+    enemies.forEach(enemy => {
+        if (!enemy.alive) return;
+        const dx = (enemy.x + enemy.size / 2) - attackX;
+        const dy = (enemy.y + enemy.size / 2) - attackY;
+        if (Math.sqrt(dx*dx + dy*dy) < 52) killEnemy(enemy);
+    });
+}
+
+function killEnemy(enemy) {
+    enemy.alive = false;
+    enemy.respawnTimer = RESPAWN_TIME;
+
+    for (let i = 0; i < 11; i++) {
+        particles.push({
+            x: enemy.x + enemy.size / 2,
+            y: enemy.y + enemy.size / 2,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8,
+            size: 3 + Math.random() * 4,
+            life: 28 + Math.random() * 15,
+            color: `hsl(${Math.random() * 40 + 10}, 85%, 55%)`
+        });
+    }
+
+    kills++;
+    totalKills++;
+
+    if (kills >= killsNeeded) {
+        nextFloor();
+    }
+}
+
+function nextFloor() {
+    currentFloor++;
+    kills = 0;
+    killsNeeded *= 2;
+
+    // Aumenta velocidade e quantidade (um pouco menos a partir do 3)
+    enemySpeed *= 1.333;
+    if (currentFloor >= 2) {
+        maxEnemies = Math.floor(maxEnemies * 1.22); // aumento menor nos andares altos
+    } else {
+        maxEnemies = Math.floor(maxEnemies * 1.333);
+    }
+
+    // HP: +10 no máximo e recupera tudo
+    player.maxHp = 10 + (currentFloor * 10);
+    player.hp = player.maxHp;
+
+    enemies = [];
+    for (let i = 0; i < maxEnemies; i++) spawnEnemy();
+}
+
+function resetGame() {
+    currentFloor = 0;
+    killsNeeded = 20;
+    kills = 0;
+    totalKills = 0;
+    enemySpeed = 0.55;
+    maxEnemies = 4;
+
+    player.maxHp = 10;
+    player.hp = 10;
+    player.x = canvas.width / 2 - player.size / 2;
+    player.y = canvas.height / 2 - player.size / 2;
+    player.angle = 0;
+    player.attackCooldown = 0;
+    player.fireCooldown = 0;
+    player.slashTimer = 0;
+
+    enemies = [];
+    fireballs = [];
+    particles = [];
+
+    for (let i = 0; i < maxEnemies; i++) spawnEnemy();
+    gameState = 'playing';
+}
+
+// ===== INPUT PC =====
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+canvas.addEventListener('mousedown', e => {
+    e.preventDefault();
+    if (gameState === 'dead') { resetGame(); return; }
+    if (e.button === 0) mouse.left = true;
+    if (e.button === 2) mouse.right = true;
+});
+canvas.addEventListener('mouseup', e => {
+    if (e.button === 0) mouse.left = false;
+    if (e.button === 2) mouse.right = false;
+});
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ===== INPUT MOBILE =====
+// Joystick
+joyZone.addEventListener('touchstart', e => {
+    e.preventDefault();
+    joyActive = true;
+    handleJoy(e.touches[0]);
+});
+joyZone.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (joyActive) handleJoy(e.touches[0]);
+});
+joyZone.addEventListener('touchend', e => {
+    e.preventDefault();
+    joyActive = false;
+    joyDX = 0;
+    joyDY = 0;
+    joyKnob.style.top = '35px';
+    joyKnob.style.left = '35px';
+});
+
+function handleJoy(touch) {
+    const rect = joyZone.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    let dx = touch.clientX - centerX;
+    let dy = touch.clientY - centerY;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const maxDist = 45;
+
+    if (dist > maxDist) {
+        dx = (dx / dist) * maxDist;
+        dy = (dy / dist) * maxDist;
+    }
+
+    joyKnob.style.left = (35 + dx) + 'px';
+    joyKnob.style.top = (35 + dy) + 'px';
+
+    joyDX = dx / maxDist;
+    joyDY = dy / maxDist;
+}
+
+// Botão de fogo
+document.getElementById('fireBtn').addEventListener('touchstart', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    createFireball();
+});
+
+// Toque na tela = espada (exceto nos controles)
+canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (gameState === 'dead') {
+        resetGame();
+        return;
+    }
+    // Só ataca se não estiver tocando no joystick ou botão de fogo
+    const touch = e.touches[0];
+    const joyRect = joyZone.getBoundingClientRect();
+    const fireRect = document.getElementById('fireBtn').getBoundingClientRect();
+
+    const onJoy = touch.clientX >= joyRect.left && touch.clientX <= joyRect.right &&
+                  touch.clientY >= joyRect.top && touch.clientY <= joyRect.bottom;
+    const onFire = touch.clientX >= fireRect.left && touch.clientX <= fireRect.right &&
+                   touch.clientY >= fireRect.top && touch.clientY <= fireRect.bottom;
+
+    if (!onJoy && !onFire) {
+        swordAttack();
+    }
+});
+
+// ===== UPDATE =====
+function update() {
+    if (gameState !== 'playing') return;
+
+    let dx = 0, dy = 0;
+
+    // Teclado
+    if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+    if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+    if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+    if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+
+    // Joystick
+    if (joyActive) {
+        dx = joyDX;
+        dy = joyDY;
+    }
+
+    if (dx !== 0 || dy !== 0) {
+        const len = Math.sqrt(dx*dx + dy*dy);
+        if (len > 0) {
+            dx /= len;
+            dy /= len;
+        }
+        player.x += dx * player.speed;
+        player.y += dy * player.speed;
+        player.angle = Math.atan2(dy, dx);
+    }
+
+    player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
+    player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
+
+    // PC attacks
+    if (mouse.left) swordAttack();
+    else if (mouse.right) createFireball();
+
+    if (player.attackCooldown > 0) player.attackCooldown--;
+    if (player.fireCooldown > 0) player.fireCooldown--;
+    if (player.slashTimer > 0) player.slashTimer--;
+
+    // Inimigos
+    enemies.forEach(enemy => {
+        if (!enemy.alive) {
+            enemy.respawnTimer--;
+            if (enemy.respawnTimer <= 0) {
+                const side = Math.floor(Math.random() * 4);
+                if (side === 0) { enemy.x = Math.random() * canvas.width; enemy.y = -ENEMY_SIZE - 10; }
+                else if (side === 1) { enemy.x = canvas.width + ENEMY_SIZE + 10; enemy.y = Math.random() * canvas.height; }
+                else if (side === 2) { enemy.x = Math.random() * canvas.width; enemy.y = canvas.height + ENEMY_SIZE + 10; }
+                else { enemy.x = -ENEMY_SIZE - 10; enemy.y = Math.random() * canvas.height; }
+                enemy.alive = true;
+                enemy.anim = Math.random() * Math.PI * 2;
+            }
+            return;
+        }
+
+        enemy.anim += 0.09;
+        const angle = Math.atan2(
+            (player.y + player.size/2) - (enemy.y + enemy.size/2),
+            (player.x + player.size/2) - (enemy.x + enemy.size/2)
+        );
+        enemy.x += Math.cos(angle) * enemySpeed;
+        enemy.y += Math.sin(angle) * enemySpeed;
+
+        if (player.x < enemy.x + enemy.size && player.x + player.size > enemy.x &&
+            player.y < enemy.y + enemy.size && player.y + player.size > enemy.y) {
+            player.hp -= 1;
+            killEnemy(enemy);
+            if (player.hp <= 0) gameState = 'dead';
+        }
+    });
+
+    // Fireballs
+    for (let i = fireballs.length - 1; i >= 0; i--) {
+        const f = fireballs[i];
+        f.x += f.vx; f.y += f.vy; f.life--;
+
+        enemies.forEach(enemy => {
+            if (!enemy.alive) return;
+            const dx = (enemy.x + enemy.size/2) - f.x;
+            const dy = (enemy.y + enemy.size/2) - f.y;
+            if (Math.sqrt(dx*dx + dy*dy) < enemy.size/2 + f.size/2) {
+                killEnemy(enemy);
+                f.life = 0;
+            }
+        });
+
+        if (f.life <= 0 || f.x < -60 || f.x > canvas.width+60 || f.y < -60 || f.y > canvas.height+60) {
+            fireballs.splice(i, 1);
+        }
+    }
+
+    // Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx; p.y += p.vy;
+        p.vx *= 0.95; p.vy *= 0.95;
+        p.life--; p.size *= 0.96;
+        if (p.life <= 0 || p.size < 0.5) particles.splice(i, 1);
+    }
+
+    if (Math.random() < 0.007 && enemies.filter(e => e.alive).length < maxEnemies) {
+        spawnEnemy();
+    }
+}
+
+// ===== DRAW =====
+function draw() {
+    const theme = getTheme();
+
+    ctx.fillStyle = theme.ground;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = theme.accent;
+    for (let i = 0; i < canvas.width; i += 70) {
+        for (let j = 0; j < canvas.height; j += 70) {
+            ctx.globalAlpha = 0.13;
+            ctx.fillRect(i + 8, j + 8, 54, 54);
+        }
+    }
+    ctx.globalAlpha = 1;
+
+    if (gameState === 'playing') {
+        enemies.forEach(enemy => {
+            if (!enemy.alive) return;
+            const scale = 1 + Math.sin(enemy.anim) * 0.09;
+            const s = enemy.size * scale;
+            const ox = (enemy.size - s) / 2;
+            const oy = (enemy.size - s) / 2;
+            ctx.fillStyle = theme.enemy;
+            ctx.fillRect(enemy.x + ox, enemy.y + oy, s, s);
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(enemy.x + ox, enemy.y + oy, s, s);
+        });
+
+        particles.forEach(p => {
+            ctx.globalAlpha = Math.min(1, p.life / 35);
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        });
+
+        fireballs.forEach(f => {
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff4400';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, f.size * 0.55, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffcc00';
+            ctx.fill();
+        });
+
+        // Player
+        ctx.fillStyle = '#2060ff';
+        ctx.fillRect(player.x, player.y, player.size, player.size);
+
+        ctx.strokeStyle = '#80a0ff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(player.x + player.size/2, player.y + player.size/2);
+        ctx.lineTo(
+            player.x + player.size/2 + Math.cos(player.angle)*26,
+            player.y + player.size/2 + Math.sin(player.angle)*26
+        );
+        ctx.stroke();
+
+        if (player.slashTimer > 0) {
+            const progress = player.slashTimer / 12;
+            ctx.strokeStyle = `rgba(180,220,255,${progress})`;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(player.x + player.size/2, player.y + player.size/2, 52, player.angle - 0.95, player.angle + 0.95);
+            ctx.stroke();
+        }
+
+        // UI
+        ctx.fillStyle = '#222';
+        ctx.fillRect(20, 20, 180, 18);
+        ctx.fillStyle = player.hp > 4 ? '#22cc44' : '#ff3333';
+        ctx.fillRect(20, 20, (player.hp / player.maxHp) * 180, 18);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(20, 20, 180, 18);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(`HP: ${player.hp}/${player.maxHp}`, 28, 34);
+
+        ctx.fillStyle = '#ffcc00';
+        ctx.font = '16px Arial';
+        ctx.fillText(getTheme().name, 20, 58);
+        ctx.fillText(`Kills: ${kills}/${killsNeeded}  |  Total: ${totalKills}`, 20, 80);
+
+        if (!isMobile) {
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.font = '13px Arial';
+            ctx.fillText('WASD = mover | Clique Esquerdo = Espada | Clique Direito = Fogo', 20, canvas.height - 18);
+        }
+    }
+
+    if (gameState === 'dead') {
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#ff3333';
+        ctx.font = 'bold 56px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('VOCÊ MORREU', canvas.width/2, canvas.height/2 - 60);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '22px Arial';
+        ctx.fillText(`Chegou no ${getTheme().name}`, canvas.width/2, canvas.height/2);
+        ctx.fillText(`Total de monstros: ${totalKills}`, canvas.width/2, canvas.height/2 + 35);
+
+        ctx.fillStyle = '#ffaa00';
+        ctx.font = '20px Arial';
+        ctx.fillText('Toque ou clique para tentar de novo', canvas.width/2, canvas.height/2 + 80);
+    }
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+resetGame();
+gameLoop();
+</script>
+</body>
+</html>
