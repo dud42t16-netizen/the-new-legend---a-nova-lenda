@@ -9,7 +9,6 @@
     body { background: #111; overflow: hidden; width: 100vw; height: 100vh; }
     canvas { display: block; position: absolute; top: 0; left: 0; }
 
-    /* Controles mobile */
     #mobileControls {
         display: none;
         position: absolute;
@@ -21,51 +20,49 @@
 
     #joystickZone {
         position: absolute;
-        bottom: 30px;
-        left: 30px;
-        width: 130px;
-        height: 130px;
+        bottom: 25px;
+        left: 25px;
+        width: 110px;
+        height: 110px;
         pointer-events: auto;
     }
 
     #joystickBase {
-        width: 130px;
-        height: 130px;
-        background: rgba(255,255,255,0.12);
-        border: 2px solid rgba(255,255,255,0.25);
+        width: 110px;
+        height: 110px;
+        background: rgba(255,255,255,0.11);
+        border: 2px solid rgba(255,255,255,0.22);
         border-radius: 50%;
         position: absolute;
     }
 
     #joystickKnob {
-        width: 60px;
-        height: 60px;
-        background: rgba(255,255,255,0.35);
+        width: 50px;
+        height: 50px;
+        background: rgba(255,255,255,0.32);
         border-radius: 50%;
         position: absolute;
-        top: 35px;
-        left: 35px;
-        transition: none;
+        top: 30px;
+        left: 30px;
     }
 
     #fireBtn {
         position: absolute;
-        bottom: 40px;
-        right: 30px;
-        width: 80px;
-        height: 80px;
-        background: rgba(255, 80, 0, 0.35);
-        border: 2px solid rgba(255, 150, 50, 0.6);
+        bottom: 35px;
+        right: 25px;
+        width: 68px;
+        height: 68px;
+        background: rgba(255, 80, 0, 0.32);
+        border: 2px solid rgba(255, 150, 50, 0.55);
         border-radius: 50%;
         pointer-events: auto;
         display: flex;
         align-items: center;
         justify-content: center;
         color: #ffcc88;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: bold;
         text-align: center;
-        line-height: 1.2;
     }
 </style>
 </head>
@@ -92,7 +89,6 @@ function resizeCanvas() {
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
-// Detecta se é mobile
 const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 if (isMobile) {
     document.getElementById('mobileControls').style.display = 'block';
@@ -110,7 +106,6 @@ const floors = [
     { name: "Andar 8 - Sangue", bg: "#1a0000", ground: "#2a0505", accent: "#5a1010", enemy: "#0f0000" }
 ];
 
-// ===== ESTADO =====
 let currentFloor = 0;
 let killsNeeded = 20;
 let kills = 0;
@@ -119,18 +114,16 @@ let enemySpeed = 0.55;
 let maxEnemies = 4;
 let gameState = 'playing';
 
-// ===== JOGADOR =====
 const player = {
     x: 0, y: 0, size: 36, speed: 4.3,
-    hp: 10,
-    maxHp: 10,               // começa com 10
+    hp: 10, maxHp: 10,
     angle: 0,
     attackCooldown: 0,
     fireCooldown: 0,
-    slashTimer: 0
+    slashTimer: 0,
+    slashParticles: []
 };
 
-// ===== ARRAYS =====
 let enemies = [];
 let fireballs = [];
 let particles = [];
@@ -138,18 +131,17 @@ let particles = [];
 const ENEMY_SIZE = 28;
 const RESPAWN_TIME = 220;
 
-// ===== CONTROLES =====
 const keys = {};
 let mouse = { left: false, right: false };
 
-// Joystick
+// Joystick (corrigido)
 let joyActive = false;
+let joyTouchId = null;
 let joyDX = 0;
 let joyDY = 0;
 const joyKnob = document.getElementById('joystickKnob');
 const joyZone = document.getElementById('joystickZone');
 
-// ===== FUNÇÕES =====
 function getTheme() {
     return floors[Math.min(currentFloor, floors.length - 1)];
 }
@@ -186,18 +178,31 @@ function createFireball() {
 
 function swordAttack() {
     if (player.attackCooldown > 0) return;
-    player.attackCooldown = 22;
-    player.slashTimer = 12;
+    player.attackCooldown = 20;
+    player.slashTimer = 14;
 
-    const range = 68;
-    const attackX = player.x + player.size / 2 + Math.cos(player.angle) * (range * 0.7);
-    const attackY = player.y + player.size / 2 + Math.sin(player.angle) * (range * 0.7);
+    // Cria partículas do corte (efeito anime)
+    player.slashParticles = [];
+    for (let i = 0; i < 8; i++) {
+        const a = player.angle - 0.9 + (i / 7) * 1.8;
+        player.slashParticles.push({
+            x: player.x + player.size / 2 + Math.cos(a) * 30,
+            y: player.y + player.size / 2 + Math.sin(a) * 30,
+            angle: a,
+            life: 12,
+            maxLife: 12
+        });
+    }
+
+    const range = 70;
+    const attackX = player.x + player.size / 2 + Math.cos(player.angle) * (range * 0.65);
+    const attackY = player.y + player.size / 2 + Math.sin(player.angle) * (range * 0.65);
 
     enemies.forEach(enemy => {
         if (!enemy.alive) return;
         const dx = (enemy.x + enemy.size / 2) - attackX;
         const dy = (enemy.y + enemy.size / 2) - attackY;
-        if (Math.sqrt(dx*dx + dy*dy) < 52) killEnemy(enemy);
+        if (Math.sqrt(dx*dx + dy*dy) < 54) killEnemy(enemy);
     });
 }
 
@@ -205,7 +210,7 @@ function killEnemy(enemy) {
     enemy.alive = false;
     enemy.respawnTimer = RESPAWN_TIME;
 
-    for (let i = 0; i < 11; i++) {
+    for (let i = 0; i < 12; i++) {
         particles.push({
             x: enemy.x + enemy.size / 2,
             y: enemy.y + enemy.size / 2,
@@ -219,10 +224,7 @@ function killEnemy(enemy) {
 
     kills++;
     totalKills++;
-
-    if (kills >= killsNeeded) {
-        nextFloor();
-    }
+    if (kills >= killsNeeded) nextFloor();
 }
 
 function nextFloor() {
@@ -230,15 +232,13 @@ function nextFloor() {
     kills = 0;
     killsNeeded *= 2;
 
-    // Aumenta velocidade e quantidade (um pouco menos a partir do 3)
     enemySpeed *= 1.333;
     if (currentFloor >= 2) {
-        maxEnemies = Math.floor(maxEnemies * 1.22); // aumento menor nos andares altos
+        maxEnemies = Math.floor(maxEnemies * 1.22);
     } else {
         maxEnemies = Math.floor(maxEnemies * 1.333);
     }
 
-    // HP: +10 no máximo e recupera tudo
     player.maxHp = 10 + (currentFloor * 10);
     player.hp = player.maxHp;
 
@@ -262,6 +262,7 @@ function resetGame() {
     player.attackCooldown = 0;
     player.fireCooldown = 0;
     player.slashTimer = 0;
+    player.slashParticles = [];
 
     enemies = [];
     fireballs = [];
@@ -287,25 +288,53 @@ canvas.addEventListener('mouseup', e => {
 });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-// ===== INPUT MOBILE =====
-// Joystick
+// ===== JOYSTICK CORRIGIDO (sem bug de dedo fantasma) =====
 joyZone.addEventListener('touchstart', e => {
     e.preventDefault();
+    e.stopPropagation();
+    if (joyActive) return; // já tem um dedo
+    const t = e.changedTouches[0];
     joyActive = true;
-    handleJoy(e.touches[0]);
-});
+    joyTouchId = t.identifier;
+    handleJoy(t);
+}, { passive: false });
+
 joyZone.addEventListener('touchmove', e => {
     e.preventDefault();
-    if (joyActive) handleJoy(e.touches[0]);
-});
+    e.stopPropagation();
+    if (!joyActive) return;
+    for (let t of e.changedTouches) {
+        if (t.identifier === joyTouchId) {
+            handleJoy(t);
+            break;
+        }
+    }
+}, { passive: false });
+
+function endJoy(e) {
+    for (let t of e.changedTouches) {
+        if (t.identifier === joyTouchId) {
+            joyActive = false;
+            joyTouchId = null;
+            joyDX = 0;
+            joyDY = 0;
+            joyKnob.style.top = '30px';
+            joyKnob.style.left = '30px';
+            break;
+        }
+    }
+}
+
 joyZone.addEventListener('touchend', e => {
     e.preventDefault();
-    joyActive = false;
-    joyDX = 0;
-    joyDY = 0;
-    joyKnob.style.top = '35px';
-    joyKnob.style.left = '35px';
-});
+    e.stopPropagation();
+    endJoy(e);
+}, { passive: false });
+
+joyZone.addEventListener('touchcancel', e => {
+    e.preventDefault();
+    endJoy(e);
+}, { passive: false });
 
 function handleJoy(touch) {
     const rect = joyZone.getBoundingClientRect();
@@ -315,15 +344,15 @@ function handleJoy(touch) {
     let dx = touch.clientX - centerX;
     let dy = touch.clientY - centerY;
     const dist = Math.sqrt(dx*dx + dy*dy);
-    const maxDist = 45;
+    const maxDist = 38;
 
     if (dist > maxDist) {
         dx = (dx / dist) * maxDist;
         dy = (dy / dist) * maxDist;
     }
 
-    joyKnob.style.left = (35 + dx) + 'px';
-    joyKnob.style.top = (35 + dy) + 'px';
+    joyKnob.style.left = (30 + dx) + 'px';
+    joyKnob.style.top = (30 + dy) + 'px';
 
     joyDX = dx / maxDist;
     joyDY = dy / maxDist;
@@ -334,17 +363,17 @@ document.getElementById('fireBtn').addEventListener('touchstart', e => {
     e.preventDefault();
     e.stopPropagation();
     createFireball();
-});
+}, { passive: false });
 
-// Toque na tela = espada (exceto nos controles)
+// Toque na tela = espada
 canvas.addEventListener('touchstart', e => {
     e.preventDefault();
     if (gameState === 'dead') {
         resetGame();
         return;
     }
-    // Só ataca se não estiver tocando no joystick ou botão de fogo
-    const touch = e.touches[0];
+
+    const touch = e.changedTouches[0];
     const joyRect = joyZone.getBoundingClientRect();
     const fireRect = document.getElementById('fireBtn').getBoundingClientRect();
 
@@ -356,7 +385,7 @@ canvas.addEventListener('touchstart', e => {
     if (!onJoy && !onFire) {
         swordAttack();
     }
-});
+}, { passive: false });
 
 // ===== UPDATE =====
 function update() {
@@ -364,13 +393,11 @@ function update() {
 
     let dx = 0, dy = 0;
 
-    // Teclado
     if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
     if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
     if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
     if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
 
-    // Joystick
     if (joyActive) {
         dx = joyDX;
         dy = joyDY;
@@ -378,10 +405,7 @@ function update() {
 
     if (dx !== 0 || dy !== 0) {
         const len = Math.sqrt(dx*dx + dy*dy);
-        if (len > 0) {
-            dx /= len;
-            dy /= len;
-        }
+        if (len > 0) { dx /= len; dy /= len; }
         player.x += dx * player.speed;
         player.y += dy * player.speed;
         player.angle = Math.atan2(dy, dx);
@@ -390,7 +414,6 @@ function update() {
     player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
     player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
 
-    // PC attacks
     if (mouse.left) swordAttack();
     else if (mouse.right) createFireball();
 
@@ -398,7 +421,10 @@ function update() {
     if (player.fireCooldown > 0) player.fireCooldown--;
     if (player.slashTimer > 0) player.slashTimer--;
 
-    // Inimigos
+    // Atualiza partículas do corte
+    player.slashParticles.forEach(p => p.life--);
+    player.slashParticles = player.slashParticles.filter(p => p.life > 0);
+
     enemies.forEach(enemy => {
         if (!enemy.alive) {
             enemy.respawnTimer--;
@@ -430,7 +456,6 @@ function update() {
         }
     });
 
-    // Fireballs
     for (let i = fireballs.length - 1; i >= 0; i--) {
         const f = fireballs[i];
         f.x += f.vx; f.y += f.vy; f.life--;
@@ -450,7 +475,6 @@ function update() {
         }
     }
 
-    // Particles
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         p.x += p.vx; p.y += p.vy;
@@ -528,13 +552,50 @@ function draw() {
         );
         ctx.stroke();
 
+        // ===== ANIMAÇÃO DE CORTE ESTILO ANIME =====
         if (player.slashTimer > 0) {
-            const progress = player.slashTimer / 12;
-            ctx.strokeStyle = `rgba(180,220,255,${progress})`;
-            ctx.lineWidth = 4;
+            const progress = player.slashTimer / 14;
+            const alpha = progress;
+
+            // Arco principal brilhante
+            ctx.strokeStyle = `rgba(180, 230, 255, ${alpha * 0.9})`;
+            ctx.lineWidth = 5;
             ctx.beginPath();
-            ctx.arc(player.x + player.size/2, player.y + player.size/2, 52, player.angle - 0.95, player.angle + 0.95);
+            ctx.arc(
+                player.x + player.size/2,
+                player.y + player.size/2,
+                58,
+                player.angle - 1.1,
+                player.angle + 1.1
+            );
             ctx.stroke();
+
+            // Segundo arco mais fino
+            ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.7})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(
+                player.x + player.size/2,
+                player.y + player.size/2,
+                64,
+                player.angle - 1.0,
+                player.angle + 1.0
+            );
+            ctx.stroke();
+
+            // Linhas de corte (efeito de lâmina)
+            player.slashParticles.forEach(p => {
+                const pAlpha = p.life / p.maxLife;
+                ctx.strokeStyle = `rgba(200, 240, 255, ${pAlpha})`;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(
+                    p.x + Math.cos(p.angle) * 28,
+                    p.y + Math.sin(p.angle) * 28
+                );
+                ctx.stroke();
+            });
         }
 
         // UI
