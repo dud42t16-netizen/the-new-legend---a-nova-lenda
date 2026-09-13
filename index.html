@@ -1,907 +1,1472 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>The New Legend</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; user-select: none; }
-        body { background: #000; overflow: hidden; width: 100vw; height: 100vh; }
-        canvas { display: block; position: absolute; top: 0; left: 0; }
-        #mobileControls {
-            display: none; position: absolute; top: 0; left: 0;
-            width: 100%; height: 100%; pointer-events: none; z-index: 10;
-        }
-        #joystickZone {
-            position: absolute; bottom: 25px; left: 25px;
-            width: 110px; height: 110px; pointer-events: auto;
-        }
-        #joystickBase {
-            width: 110px; height: 110px;
-            background: rgba(255,255,255,0.11);
-            border: 2px solid rgba(255,255,255,0.22);
-            border-radius: 50%; position: absolute;
-        }
-        #joystickKnob {
-            width: 50px; height: 50px;
-            background: rgba(255,255,255,0.32);
-            border-radius: 50%; position: absolute; top: 30px; left: 30px;
-        }
-        #fireBtn {
-            position: absolute; bottom: 35px; right: 25px;
-            width: 68px; height: 68px;
-            background: rgba(255,80,0,0.32);
-            border: 2px solid rgba(255,150,50,0.55);
-            border-radius: 50%; pointer-events: auto;
-            display: flex; align-items: center; justify-content: center;
-            color: #ffcc88; font-size: 12px; font-weight: bold;
-        }
-        #pauseBtn {
-            position: absolute; top: 15px; right: 15px;
-            width: 42px; height: 42px;
-            background: rgba(0,0,0,0.45);
-            border: 2px solid rgba(255,255,255,0.35);
-            border-radius: 10px; pointer-events: auto;
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 16px; z-index: 20;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<title>The New Legend</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none;user-select:none}
+body{background:#000;overflow:hidden;width:100vw;height:100vh}
+canvas{display:block;position:absolute;top:0;left:0}
+#mobileControls{display:none;position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}
+#joystickZone{position:absolute;bottom:25px;left:25px;width:110px;height:110px;pointer-events:auto}
+#joystickBase{width:110px;height:110px;background:rgba(255,255,255,0.11);border:2px solid rgba(255,255,255,0.22);border-radius:50%;position:absolute}
+#joystickKnob{width:50px;height:50px;background:rgba(255,255,255,0.32);border-radius:50%;position:absolute;top:30px;left:30px}
+#fireBtn{position:absolute;bottom:35px;right:25px;width:68px;height:68px;background:rgba(255,80,0,0.32);border:2px solid rgba(255,150,50,0.55);border-radius:50%;pointer-events:auto;display:flex;align-items:center;justify-content:center;color:#ffcc88;font-size:12px;font-weight:bold}
+#pauseBtn{position:absolute;top:15px;right:15px;width:42px;height:42px;background:rgba(0,0,0,0.45);border:2px solid rgba(255,255,255,0.35);border-radius:10px;pointer-events:auto;display:flex;align-items:center;justify-content:center;color:white;font-size:16px;z-index:20}
+#skipBtn{position:absolute;top:15px;right:65px;padding:8px 12px;background:rgba(180,40,40,0.75);border:2px solid #ff6666;border-radius:8px;color:#fff;font-size:13px;font-weight:bold;pointer-events:auto;z-index:25;display:none}
+</style>
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
-    <div id="mobileControls">
-        <div id="joystickZone">
-            <div id="joystickBase"></div>
-            <div id="joystickKnob"></div>
-        </div>
-        <div id="fireBtn">FOGO</div>
-        <div id="pauseBtn">❚❚</div>
-    </div>
+<canvas id="gameCanvas"></canvas>
+<div id="mobileControls">
+<div id="joystickZone"><div id="joystickBase"></div><div id="joystickKnob"></div></div>
+<div id="fireBtn">FOGO</div>
+<div id="pauseBtn">❚❚</div>
+</div>
+<button id="skipBtn">Pular Andar</button>
+<script>
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
+resizeCanvas();window.addEventListener('resize',resizeCanvas);
+const isMobile=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
+if(isMobile)document.getElementById('mobileControls').style.display='block';
 
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+const SPRITE_PATH='cavaleiro_sprites/';
+const sprites={},portraits={},friendSprites={};
+let tempestasSp=null,tempestasPortrait=null,ignisSp=null,ignisPortrait=null;
+const loadImage=src=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.onerror=()=>r(null);i.src=src});
 
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
+async function carregarImagens(){
+  const lista=['andar_baixo_spritesheet','andar_cima_spritesheet','andar_esquerda_spritesheet','andar_direita_spritesheet','parado_baixo_spritesheet','parado_cima_spritesheet','parado_esquerda_spritesheet','parado_direita_spritesheet','ataque_horizontal_baixo_spritesheet','ataque_horizontal_cima_spritesheet','ataque_horizontal_esquerda_spritesheet','ataque_horizontal_direita_spritesheet'];
+  for(const n of lista)sprites[n]=await loadImage(SPRITE_PATH+n+'.png');
+  portraits.heros=await loadImage(SPRITE_PATH+'heros.png');
+  portraits['mago-anciao']=await loadImage(SPRITE_PATH+'mago-anciao.png');
+  portraits.liora=await loadImage(SPRITE_PATH+'liora.png');
+  portraits.valeria=await loadImage(SPRITE_PATH+'valeria.png');
+  portraits.lucian=await loadImage(SPRITE_PATH+'lucian.png');
+  friendSprites.valeria=await loadImage(SPRITE_PATH+'valeriasp.png');
+  friendSprites.liora=await loadImage(SPRITE_PATH+'liorasp.png');
+  friendSprites.lucian=await loadImage(SPRITE_PATH+'luciansp.png');
+  tempestasSp=await loadImage(SPRITE_PATH+'tempestassp.png')||await loadImage('tempestassp.png');
+  tempestasPortrait=await loadImage(SPRITE_PATH+'tempestas.png')||await loadImage('tempestas.png');
+  if(tempestasPortrait)portraits.tempestas=tempestasPortrait;
+  ignisSp=await loadImage(SPRITE_PATH+'ignissp.png')||await loadImage('ignissp.png');
+  ignisPortrait=await loadImage(SPRITE_PATH+'ignis.png')||await loadImage('ignis.png');
+  if(ignisPortrait)portraits.ignis=ignisPortrait;
+}
 
-        const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-        if (isMobile) document.getElementById('mobileControls').style.display = 'block';
+const animConfig={
+  andar_baixo:{sheet:'andar_baixo_spritesheet',fw:64,fh:64,frames:8,speed:6},
+  andar_cima:{sheet:'andar_cima_spritesheet',fw:64,fh:64,frames:8,speed:6},
+  andar_esquerda:{sheet:'andar_esquerda_spritesheet',fw:64,fh:64,frames:8,speed:6},
+  andar_direita:{sheet:'andar_direita_spritesheet',fw:64,fh:64,frames:8,speed:6},
+  parado_baixo:{sheet:'parado_baixo_spritesheet',fw:64,fh:64,frames:4,speed:18},
+  parado_cima:{sheet:'parado_cima_spritesheet',fw:64,fh:64,frames:4,speed:18},
+  parado_esquerda:{sheet:'parado_esquerda_spritesheet',fw:64,fh:64,frames:5,speed:18},
+  parado_direita:{sheet:'parado_direita_spritesheet',fw:64,fh:64,frames:5,speed:18},
+  ataque_baixo:{sheet:'ataque_horizontal_baixo_spritesheet',fw:64,fh:64,frames:5,speed:4},
+  ataque_cima:{sheet:'ataque_horizontal_cima_spritesheet',fw:64,fh:64,frames:5,speed:4},
+  ataque_esquerda:{sheet:'ataque_horizontal_esquerda_spritesheet',fw:96,fh:64,frames:6,speed:4},
+  ataque_direita:{sheet:'ataque_horizontal_direita_spritesheet',fw:96,fh:64,frames:6,speed:4}
+};
 
-        const SPRITE_PATH = 'cavaleiro_sprites/';
-        const sprites = {};
-        const portraits = {};
+const floorOrder=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26];
+const floors=[
+  {name:'Andar 1 - Pedra Antiga',ground:'#3d3d3d',accent:'#555',enemy:'#111',type:'normal'},
+  {name:'Andar 2 - Floresta Sombria',ground:'#1a331a',accent:'#2d5a2d',enemy:'#0a1a0a',type:'normal'},
+  {name:'Andar 3 - Caverna de Cristal',ground:'#2a1a4e',accent:'#5a3a8a',enemy:'#0f0520',type:'normal'},
+  {name:'Andar 4 - Inferno',ground:'#4a1515',accent:'#8a3030',enemy:'#1a0505',type:'normal'},
+  {name:'Andar 5 - Gelo Eterno',ground:'#1a2a3a',accent:'#3a5a7a',enemy:'#051015',type:'normal'},
+  {name:'Andar 6 - Ruínas Douradas',ground:'#3d2e10',accent:'#8a6a20',enemy:'#1a1205',type:'normal'},
+  {name:'Andar 7 - Vazio',ground:'#121212',accent:'#333',enemy:'#000',type:'normal'},
+  {name:'Andar 8 - Colossos',ground:'#2a1a1a',accent:'#5a3030',enemy:'#1a0505',type:'big'},
+  {name:'Andar 9 - Titãs',ground:'#1a1a2a',accent:'#30305a',enemy:'#05051a',type:'big'},
+  {name:'Andar 10 - Abismo',ground:'#0a0a0a',accent:'#222',enemy:'#000',type:'big'},
+  {name:'Andar 20 - Eco',ground:'#1a2a1a',accent:'#2a4a2a',enemy:'#0a150a',type:'scale',count:22},
+  {name:'Andar 30 - Profundezas',ground:'#1a1a2a',accent:'#2a2a4a',enemy:'#0a0a15',type:'scale',count:22},
+  {name:'Andar 40 - Arcanos',ground:'#2a1a2a',accent:'#4a2a4a',enemy:'#150a15',type:'mage',count:6,hp:8},
+  {name:'Andar 50 - Feiticeiros',ground:'#1a0a1a',accent:'#3a1a3a',enemy:'#0a050a',type:'mage',count:7,hp:8},
+  {name:'Andar 60 - Corredor das Sombras',ground:'#151520',accent:'#2a2a3a',enemy:'#0a0a12',type:'shadow',count:12,hp:6},
+  {name:'Andar 70 - Guardiões',ground:'#201510',accent:'#3a2a18',enemy:'#120a05',type:'guardian',count:50,hp:10},
+  {name:'Andar 80 - Colossos Finais',ground:'#1a0a0a',accent:'#3a1515',enemy:'#0a0505',type:'mega',count:3,hp:80},
+  {name:'Andar 90 - Portal Negro',ground:'#0d0515',accent:'#2a1040',enemy:'#1a0a2a',type:'mix90',detail:true},
+  {name:'Andar 91 - Veias da Torre',ground:'#150510',accent:'#3a1020',enemy:'#200810',type:'late',count:12,hp:13,detail:true},
+  {name:'Andar 92 - Núcleo Rachado',ground:'#100515',accent:'#2a1530',enemy:'#180a20',type:'late',count:14,hp:16,detail:true},
+  {name:'Andar 93 - Limiar',ground:'#0a0510',accent:'#201028',enemy:'#120818',type:'late',count:16,hp:19,detail:true},
+  {name:'Andar 94 - Jardim Invertido',ground:'#061208',accent:'#1a3a22',enemy:'#0a2010',type:'garden',count:14,hp:22,detail:'garden'},
+  {name:'Andar 95 - Espelho da Torre',ground:'#0a0a18',accent:'#1a1a3a',enemy:'#101028',type:'mirror',count:10,hp:25,detail:'mirror'},
+  {name:'Andar 96 - Último Fôlego',ground:'#120808',accent:'#2a1510',enemy:'#1a0a08',type:'mix96',detail:true},
+  {name:'Andar 97 - Limite',ground:'#0a0508',accent:'#1a0a10',enemy:'#120508',type:'mix97',detail:true},
+  {name:'Andar 98 - Salão do Eco',ground:'#0c1018',accent:'#1a2840',enemy:'#0a1520',type:'boss98',detail:'echo',allies:true,boss:'tempestas'},
+  {name:'Andar 99 - Fornalha',ground:'#1a0800',accent:'#4a1800',enemy:'#2a0a00',type:'empty',detail:'flames',allies:true,showIgnis:true}
+];
 
-        const loadImage = (src) => new Promise(resolve => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = () => resolve(null);
-            img.src = src;
+let gameState='title',isPaused=false,titleAlpha=1,titleTimer=0,dialogIndex=0;
+let floorIndex=0,killsNeeded=20,kills=0,totalKills=0,enemySpeed=0.55;
+let swordDmg=1,fireDmg=1,maxConcurrent=6,tripleFire=false;
+let swordRange=70,swordHit=58;
+let pendingFloorIndex=0,transitionName='',transitionBtn=null;
+let clearTimer=0,post10Step=0,pendingSpecial=null;
+let spawnQueue=0,spawnTimer=0,totalToSpawn=0;
+let scaleAfter80=0;
+let mixSpawnState={meleeLeft:0,shooterLeft:0};
+let post96Step=0,rescueStep=0,rescueTimer=0;
+let healParticles=[],rescueMonsters=[],friendActors=[],friendShots=[];
+let showFriends=false,dialogFade=0;
+let partyAllies=[];
+let flameParticles=[];
+
+let tempestasDialogIndex=0;
+let boss=null;
+let bossProjectiles=[];
+let groundMarks=[];
+let barrierY=0;
+let allyShootTimer=0;
+let lucianBalloon=null;
+let lioraBalloon=null;
+let openingDone=false;
+let barrierPulse=0;
+let openingWait=0;
+let menuButtons=[];
+let pauseButtons=[];
+let saveMsgTimer=0;
+let hasSave=false;
+
+const player={x:0,y:0,size:48,speed:3.8,baseSpeed:3.8,hp:10,maxHp:10,angle:Math.PI/2,dir:'baixo',state:'parado',frame:0,frameTimer:0,attackCooldown:0,fireCooldown:0,slashTimer:0,invincible:0};
+let enemies=[],fireballs=[],enemyShots=[],particles=[],deathButtons=[];
+const keys={};let mouse={left:false,right:false};
+let joyActive=false,joyTouchId=null,joyDX=0,joyDY=0;
+const joyKnob=document.getElementById('joystickKnob');
+const joyZone=document.getElementById('joystickZone');
+const skipBtn=document.getElementById('skipBtn');
+
+function currentFloorData(){return floors[floorOrder[floorIndex]]}
+function getTheme(){return currentFloorData()}
+function getAnimKey(){if(player.state==='ataque')return'ataque_'+player.dir;if(player.state==='andar')return'andar_'+player.dir;return'parado_'+player.dir}
+function isLateSpawn(){return floorOrder[floorIndex]>=25}
+
+/* ===== SAVE / LOAD ===== */
+function checkSaveExists(){
+  try{return !!localStorage.getItem('tnl_save')}catch(e){return false}
+}
+function saveGame(){
+  const data={
+    floorIndex,kills,totalKills,killsNeeded,enemySpeed,
+    swordDmg,fireDmg,tripleFire,scaleAfter80,swordRange,swordHit,
+    playerHp:player.hp,playerMaxHp:player.maxHp,
+    playerSpeed:player.speed,playerBaseSpeed:player.baseSpeed,
+    dialogIndex,gameState:gameState==='playing'||gameState==='dead'?gameState:'playing'
+  };
+  try{
+    localStorage.setItem('tnl_save',JSON.stringify(data));
+    hasSave=true;
+    saveMsgTimer=120;
+  }catch(e){}
+}
+function loadGame(){
+  try{
+    const raw=localStorage.getItem('tnl_save');
+    if(!raw)return false;
+    const d=JSON.parse(raw);
+    floorIndex=d.floorIndex||0;
+    kills=d.kills||0;
+    totalKills=d.totalKills||0;
+    killsNeeded=d.killsNeeded||20;
+    enemySpeed=d.enemySpeed||0.55;
+    swordDmg=d.swordDmg||1;
+    fireDmg=d.fireDmg||1;
+    tripleFire=!!d.tripleFire;
+    scaleAfter80=d.scaleAfter80||0;
+    swordRange=d.swordRange||70;
+    swordHit=d.swordHit||58;
+    player.maxHp=d.playerMaxHp||10;
+    player.hp=d.playerHp||player.maxHp;
+    player.baseSpeed=d.playerBaseSpeed||3.8;
+    player.speed=d.playerSpeed||player.baseSpeed;
+    player.x=canvas.width/2-player.size/2;
+    player.y=canvas.height/2-player.size/2;
+    player.angle=Math.PI/2;player.dir='baixo';player.state='parado';player.frame=0;
+    player.attackCooldown=0;player.fireCooldown=0;player.slashTimer=0;player.invincible=30;
+    enemies=[];fireballs=[];enemyShots=[];particles=[];deathButtons=[];
+    healParticles=[];boss=null;bossProjectiles=[];groundMarks=[];
+    lucianBalloon=null;lioraBalloon=null;openingDone=false;openingWait=0;
+    partyAllies=[];flameParticles=[];
+    isPaused=false;
+    skipBtn.style.display='block';
+    setupFloorSpawn();
+    gameState='playing';
+    return true;
+  }catch(e){return false}
+}
+
+function drawPlayer(){
+  const key=getAnimKey(),conf=animConfig[key];if(!conf)return;
+  const sheet=sprites[conf.sheet];
+  if(!sheet){ctx.fillStyle='#2060ff';ctx.fillRect(player.x,player.y,player.size,player.size);return}
+  const frameToUse=player.state==='parado'?0:Math.min(player.frame,conf.frames-1);
+  const fw=conf.fw,fh=conf.fh,sx=frameToUse*fw;
+  const drawW=player.size*(fw/64),ox=(drawW-player.size)/2;
+  ctx.drawImage(sheet,sx,0,fw,fh,player.x-ox,player.y,drawW,player.size);
+  ctx.font='bold 13px "Palatino Linotype","Book Antiqua",Palatino,Georgia,serif';
+  ctx.textAlign='center';
+  ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillText('Heros',player.x+player.size/2+1,player.y-8);
+  ctx.fillStyle='#e8d5a3';ctx.fillText('Heros',player.x+player.size/2,player.y-9);
+}
+
+/* ===== MONSTROS GRANDES COM BRAÇOS E GARRAS BEM VISÍVEIS ===== */
+function drawBigMonster(e){
+  const cx=e.x+e.size/2,cy=e.y+e.size/2;
+  const s=e.size*(1+Math.sin(e.anim)*0.04);
+  const pulse=0.5+Math.sin(e.anim*1.5)*0.5;
+  const armSwing=Math.sin(e.anim*1.3)*0.22;
+
+  // sombra
+  ctx.fillStyle='rgba(0,0,0,0.35)';
+  ctx.beginPath();ctx.ellipse(cx,e.y+e.size+4,s*0.42,8,0,0,Math.PI*2);ctx.fill();
+
+  // ===== BRAÇO ESQUERDO + GARRAS =====
+  ctx.save();
+  ctx.translate(cx-s*0.38,cy+s*0.02);
+  ctx.rotate(-0.55+armSwing);
+  // braço
+  ctx.fillStyle='#2a1212';
+  ctx.beginPath();
+  ctx.moveTo(-s*0.06,0);ctx.lineTo(s*0.06,0);
+  ctx.lineTo(s*0.1,s*0.42);ctx.lineTo(-s*0.1,s*0.42);
+  ctx.closePath();ctx.fill();
+  // antebraço
+  ctx.fillStyle='#1f0e0e';
+  ctx.fillRect(-s*0.09,s*0.38,s*0.18,s*0.18);
+  // mão
+  ctx.fillStyle='#150808';
+  ctx.beginPath();ctx.arc(0,s*0.58,s*0.11,0,Math.PI*2);ctx.fill();
+  // garras (3 dedos)
+  ctx.strokeStyle='#4a1818';ctx.lineWidth=Math.max(2,s*0.04);ctx.lineCap='round';
+  for(let i=-1;i<=1;i++){
+    ctx.beginPath();
+    ctx.moveTo(i*s*0.05,s*0.62);
+    ctx.lineTo(i*s*0.09,s*0.78);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // ===== BRAÇO DIREITO + GARRAS =====
+  ctx.save();
+  ctx.translate(cx+s*0.38,cy+s*0.02);
+  ctx.rotate(0.55-armSwing);
+  ctx.fillStyle='#2a1212';
+  ctx.beginPath();
+  ctx.moveTo(-s*0.06,0);ctx.lineTo(s*0.06,0);
+  ctx.lineTo(s*0.1,s*0.42);ctx.lineTo(-s*0.1,s*0.42);
+  ctx.closePath();ctx.fill();
+  ctx.fillStyle='#1f0e0e';
+  ctx.fillRect(-s*0.09,s*0.38,s*0.18,s*0.18);
+  ctx.fillStyle='#150808';
+  ctx.beginPath();ctx.arc(0,s*0.58,s*0.11,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#4a1818';ctx.lineWidth=Math.max(2,s*0.04);ctx.lineCap='round';
+  for(let i=-1;i<=1;i++){
+    ctx.beginPath();
+    ctx.moveTo(i*s*0.05,s*0.62);
+    ctx.lineTo(i*s*0.09,s*0.78);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // corpo
+  const bodyGrad=ctx.createRadialGradient(cx-s*0.15,cy-s*0.2,s*0.1,cx,cy,s*0.55);
+  bodyGrad.addColorStop(0,'#4a3030');bodyGrad.addColorStop(0.45,'#2a1515');bodyGrad.addColorStop(1,'#120808');
+  ctx.fillStyle=bodyGrad;
+  ctx.beginPath();
+  ctx.moveTo(cx-s*0.42,cy+s*0.35);
+  ctx.quadraticCurveTo(cx-s*0.5,cy-s*0.1,cx-s*0.28,cy-s*0.4);
+  ctx.quadraticCurveTo(cx,cy-s*0.52,cx+s*0.28,cy-s*0.4);
+  ctx.quadraticCurveTo(cx+s*0.5,cy-s*0.1,cx+s*0.42,cy+s*0.35);
+  ctx.quadraticCurveTo(cx,cy+s*0.48,cx-s*0.42,cy+s*0.35);
+  ctx.fill();
+
+  ctx.strokeStyle='#5a4040';ctx.lineWidth=2.5;
+  ctx.beginPath();
+  ctx.moveTo(cx-s*0.3,cy-s*0.15);ctx.lineTo(cx-s*0.1,cy+s*0.2);
+  ctx.moveTo(cx+s*0.3,cy-s*0.15);ctx.lineTo(cx+s*0.1,cy+s*0.2);
+  ctx.moveTo(cx-s*0.2,cy+s*0.1);ctx.lineTo(cx+s*0.2,cy+s*0.1);
+  ctx.stroke();
+
+  // chifres
+  ctx.fillStyle='#1a0a0a';
+  ctx.beginPath();ctx.moveTo(cx-s*0.22,cy-s*0.38);ctx.quadraticCurveTo(cx-s*0.38,cy-s*0.7,cx-s*0.15,cy-s*0.55);ctx.quadraticCurveTo(cx-s*0.18,cy-s*0.45,cx-s*0.22,cy-s*0.38);ctx.fill();
+  ctx.beginPath();ctx.moveTo(cx+s*0.22,cy-s*0.38);ctx.quadraticCurveTo(cx+s*0.38,cy-s*0.7,cx+s*0.15,cy-s*0.55);ctx.quadraticCurveTo(cx+s*0.18,cy-s*0.45,cx+s*0.22,cy-s*0.38);ctx.fill();
+
+  // olhos
+  const eyeGlow=ctx.createRadialGradient(cx-s*0.14,cy-s*0.12,1,cx-s*0.14,cy-s*0.12,s*0.12);
+  eyeGlow.addColorStop(0,`rgba(255,40,40,${0.7+pulse*0.3})`);eyeGlow.addColorStop(1,'rgba(180,0,0,0)');
+  ctx.fillStyle=eyeGlow;ctx.beginPath();ctx.arc(cx-s*0.14,cy-s*0.12,s*0.12,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(cx+s*0.14,cy-s*0.12,s*0.12,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#ff2222';
+  ctx.beginPath();ctx.ellipse(cx-s*0.14,cy-s*0.12,s*0.06,s*0.04,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(cx+s*0.14,cy-s*0.12,s*0.06,s*0.04,0,0,Math.PI*2);ctx.fill();
+
+  ctx.strokeStyle='#3a1010';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(cx-s*0.15,cy+s*0.12);ctx.quadraticCurveTo(cx,cy+s*0.22,cx+s*0.15,cy+s*0.12);ctx.stroke();
+
+  // pernas
+  ctx.fillStyle='#1a0a0a';
+  ctx.fillRect(cx-s*0.32,cy+s*0.32,s*0.14,s*0.18);ctx.fillRect(cx+s*0.18,cy+s*0.32,s*0.14,s*0.18);
+  ctx.fillStyle='#4a2020';
+  ctx.fillRect(cx-s*0.34,cy+s*0.48,s*0.06,s*0.06);ctx.fillRect(cx-s*0.22,cy+s*0.48,s*0.06,s*0.06);
+  ctx.fillRect(cx+s*0.16,cy+s*0.48,s*0.06,s*0.06);ctx.fillRect(cx+s*0.28,cy+s*0.48,s*0.06,s*0.06);
+}
+function drawMegaMonster(e){
+  drawBigMonster(e);
+  const cx=e.x+e.size/2,cy=e.y+e.size/2,s=e.size;
+  const aura=ctx.createRadialGradient(cx,cy,s*0.3,cx,cy,s*0.7);
+  aura.addColorStop(0,'rgba(180,30,30,0)');aura.addColorStop(1,`rgba(255,40,20,${0.08+Math.sin(e.anim)*0.05})`);
+  ctx.fillStyle=aura;ctx.beginPath();ctx.arc(cx,cy,s*0.7,0,Math.PI*2);ctx.fill();
+}
+
+function drawCastleRoom(){
+  const w=canvas.width,h=canvas.height;
+  ctx.fillStyle='#2a2a2e';ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='#1c1c20';ctx.fillRect(0,h*0.62,w,h*0.38);
+  ctx.fillStyle='#4a1c1c';
+  const rugW=w*0.55,rugH=h*0.22;
+  ctx.fillRect((w-rugW)/2,h*0.68,rugW,rugH);
+  ctx.strokeStyle='#8a6a2a';ctx.lineWidth=3;ctx.strokeRect((w-rugW)/2+4,h*0.68+4,rugW-8,rugH-8);
+  ctx.fillStyle='#3a3a42';ctx.fillRect(w*0.12,h*0.08,28,h*0.54);ctx.fillRect(w*0.88-28,h*0.08,28,h*0.54);
+}
+
+function drawEchoDialogBg(){
+  const w=canvas.width,h=canvas.height;
+  ctx.fillStyle='#0a0e16';ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='rgba(90,130,200,0.15)';ctx.lineWidth=2;
+  for(let i=1;i<=7;i++){ctx.beginPath();ctx.arc(w/2,h*0.32,i*28,0,Math.PI*2);ctx.stroke()}
+  ctx.fillStyle='rgba(25,40,70,0.55)';
+  ctx.fillRect(w*0.08,h*0.06,22,h*0.5);ctx.fillRect(w*0.92-22,h*0.06,22,h*0.5);
+  ctx.fillStyle='#0e1420';ctx.fillRect(0,h*0.58,w,h*0.42);
+  const g=ctx.createRadialGradient(w/2,h*0.25,10,w/2,h*0.25,w*0.45);
+  g.addColorStop(0,'rgba(120,60,200,0.18)');g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+}
+
+function drawEchoFloor(){
+  const w=canvas.width,h=canvas.height;
+  ctx.fillStyle='#0c1018';ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='rgba(80,120,180,0.12)';ctx.lineWidth=2;
+  for(let i=1;i<=8;i++){ctx.beginPath();ctx.arc(w/2,h*0.4,i*35,0,Math.PI*2);ctx.stroke()}
+  ctx.fillStyle='rgba(30,50,80,0.35)';
+  ctx.fillRect(w*0.15,h*0.1,18,h*0.55);ctx.fillRect(w*0.85-18,h*0.1,18,h*0.55);
+  ctx.strokeStyle='rgba(100,150,200,0.2)';ctx.lineWidth=3;ctx.strokeRect(10,10,w-20,h-20);
+}
+
+function drawFlameFloor(){
+  const w=canvas.width,h=canvas.height;
+  const g=ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'#1a0500');g.addColorStop(0.5,'#2a0c00');g.addColorStop(1,'#3a1200');
+  ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='#120600';ctx.fillRect(0,h*0.7,w,h*0.3);
+  ctx.strokeStyle='rgba(255,80,0,0.35)';ctx.lineWidth=2;
+  for(let i=0;i<10;i++){ctx.beginPath();const x=Math.random()*w,y=h*0.65+Math.random()*h*0.3;ctx.moveTo(x,y);ctx.lineTo(x+(Math.random()-0.5)*80,y+Math.random()*40);ctx.stroke()}
+  for(let i=0;i<25;i++){const bx=Math.random()*w,by=h*0.72+Math.random()*h*0.25;ctx.fillStyle=`rgba(255,${80+Math.random()*100},0,${0.2+Math.random()*0.4})`;ctx.beginPath();ctx.arc(bx,by,1+Math.random()*2.5,0,Math.PI*2);ctx.fill()}
+  for(let side=0;side<2;side++){
+    const bx=side===0?30:w-50;
+    for(let i=0;i<6;i++){
+      const fy=h*0.15+i*h*0.1,fw=12+Math.sin(i+Date.now()*0.003)*4;
+      const g2=ctx.createRadialGradient(bx+10,fy,2,bx+10,fy,20);
+      g2.addColorStop(0,'rgba(255,220,100,0.5)');g2.addColorStop(0.5,'rgba(255,100,20,0.3)');g2.addColorStop(1,'rgba(180,20,0,0)');
+      ctx.fillStyle=g2;ctx.beginPath();ctx.arc(bx+10,fy,18+fw*0.3,0,Math.PI*2);ctx.fill();
+    }
+  }
+  ctx.strokeStyle='rgba(255,100,30,0.25)';ctx.lineWidth=4;ctx.strokeRect(8,8,w-16,h-16);
+}
+
+function updateFlameParticles(){
+  if(getTheme().detail!=='flames')return;
+  if(Math.random()<0.4)flameParticles.push({x:Math.random()*canvas.width,y:canvas.height*0.75+Math.random()*canvas.height*0.2,vy:-0.8-Math.random()*1.5,vx:(Math.random()-0.5)*0.6,life:40+Math.random()*40,size:2+Math.random()*4,hue:20+Math.random()*30});
+  for(let i=flameParticles.length-1;i>=0;i--){const p=flameParticles[i];p.x+=p.vx;p.y+=p.vy;p.life--;p.size*=0.98;if(p.life<=0||p.size<0.5)flameParticles.splice(i,1)}
+}
+function drawFlameParticles(){
+  flameParticles.forEach(p=>{
+    ctx.globalAlpha=Math.min(1,p.life/35);
+    const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.size*2);
+    g.addColorStop(0,`hsla(${p.hue},100%,70%,0.9)`);g.addColorStop(1,`hsla(${p.hue},100%,40%,0)`);
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,p.size*2,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+  });
+}
+
+function drawFloorBackground(theme){
+  const w=canvas.width,h=canvas.height;
+  if(theme.detail==='echo'){drawEchoFloor();return}
+  if(theme.detail==='flames'){drawFlameFloor();return}
+  if(theme.detail==='garden'){
+    ctx.fillStyle=theme.ground;ctx.fillRect(0,0,w,h);
+    for(let i=0;i<30;i++){ctx.fillStyle=`rgba(40,${80+Math.random()*50},50,0.18)`;ctx.beginPath();ctx.arc(Math.random()*w,Math.random()*h,8+Math.random()*16,0,Math.PI*2);ctx.fill()}
+    ctx.strokeStyle='rgba(80,160,90,0.25)';ctx.lineWidth=3;ctx.strokeRect(10,10,w-20,h-20);
+  }else if(theme.detail==='mirror'){
+    ctx.fillStyle=theme.ground;ctx.fillRect(0,0,w,h);
+    ctx.fillStyle='rgba(80,80,140,0.08)';
+    for(let i=0;i<8;i++)ctx.fillRect(i*w/8,0,w/16,h);
+    ctx.strokeStyle='rgba(140,140,200,0.25)';ctx.lineWidth=4;ctx.strokeRect(14,14,w-28,h-28);
+  }else if(theme.detail){
+    const g=ctx.createRadialGradient(w/2,h/2,40,w/2,h/2,Math.max(w,h)*0.7);
+    g.addColorStop(0,theme.accent);g.addColorStop(1,theme.ground);
+    ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+    ctx.strokeStyle='rgba(200,100,255,0.18)';ctx.lineWidth=4;ctx.strokeRect(12,12,w-24,h-24);
+  }else{
+    ctx.fillStyle=theme.ground;ctx.fillRect(0,0,w,h);
+    ctx.fillStyle=theme.accent;
+    for(let i=0;i<w;i+=70)for(let j=0;j<h;j+=70){ctx.globalAlpha=0.13;ctx.fillRect(i+8,j+8,54,54)}
+    ctx.globalAlpha=1;
+  }
+}
+
+function drawTempestasSprite(x,y,maxH){
+  if(!tempestasSp)return;
+  const img=tempestasSp;
+  const scale=maxH/img.height;
+  const dw=img.width*scale;
+  const g=ctx.createRadialGradient(x+dw/2,y+maxH*0.4,5,x+dw/2,y+maxH*0.4,maxH*0.6);
+  g.addColorStop(0,'rgba(140,60,255,0.3)');g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(x+dw/2,y+maxH*0.4,maxH*0.6,0,Math.PI*2);ctx.fill();
+  ctx.drawImage(img,x,y,dw,maxH);
+  return {w:dw,h:maxH};
+}
+
+function drawIgnisSprite(x,y,maxH){
+  if(!ignisSp)return;
+  const img=ignisSp;
+  const scale=maxH/img.height;
+  const dw=img.width*scale;
+  // aura de fogo
+  const g=ctx.createRadialGradient(x+dw/2,y+maxH*0.45,5,x+dw/2,y+maxH*0.45,maxH*0.7);
+  g.addColorStop(0,'rgba(255,100,20,0.35)');g.addColorStop(0.5,'rgba(255,40,0,0.15)');g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(x+dw/2,y+maxH*0.45,maxH*0.7,0,Math.PI*2);ctx.fill();
+  ctx.drawImage(img,x,y,dw,maxH);
+  return {w:dw,h:maxH};
+}
+
+function drawDialogBox(speaker,text,portraitKey){
+  const w=canvas.width,h=canvas.height;
+  if(portraitKey&&portraits[portraitKey]){
+    const img=portraits[portraitKey];
+    const maxH=Math.min(h*0.42,300);
+    const scale=maxH/img.height;
+    ctx.drawImage(img,(w-img.width*scale)/2,h*0.04,img.width*scale,img.height*scale);
+  }
+  const boxH=Math.min(190,h*0.34),boxY=h-boxH-14,boxX=14,boxW=w-28;
+  ctx.fillStyle='rgba(0,0,0,0.88)';ctx.fillRect(boxX,boxY,boxW,boxH);
+  ctx.strokeStyle='#c9a227';ctx.lineWidth=3;ctx.strokeRect(boxX,boxY,boxW,boxH);
+  if(speaker){ctx.fillStyle='#ffd700';ctx.font='bold 16px Georgia,serif';ctx.textAlign='left';ctx.fillText(speaker,boxX+14,boxY+24)}
+  ctx.fillStyle='#fff';ctx.font='14px Georgia,serif';ctx.textAlign='left';
+  const maxWidth=boxW-28;const words=text.split(' ');
+  let line='',ly=boxY+(speaker?48:30);
+  for(let i=0;i<words.length;i++){
+    const test=line+words[i]+' ';
+    if(ctx.measureText(test).width>maxWidth&&line!==''){ctx.fillText(line,boxX+14,ly);line=words[i]+' ';ly+=18;if(ly>boxY+boxH-16)break}
+    else line=test;
+  }
+  ctx.fillText(line,boxX+14,ly);
+  ctx.fillStyle='rgba(255,255,255,0.4)';ctx.font='12px Arial';ctx.textAlign='right';
+  ctx.fillText('▼',boxX+boxW-12,boxY+boxH-10);
+}
+
+function setupPartyAllies(){
+  const stopY=canvas.height-92;
+  partyAllies=[
+    {key:'valeria',x:canvas.width*0.25,y:stopY,size:52},
+    {key:'lucian',x:canvas.width*0.50,y:stopY,size:52},
+    {key:'liora',x:canvas.width*0.75,y:stopY,size:52}
+  ];
+  barrierY=stopY-8;
+}
+
+function drawSpeechBalloon(x,y,text,borderColor){
+  ctx.font='bold 13px Arial';
+  const tw=ctx.measureText(text).width;
+  const bw=tw+28,bh=34;
+  const bx=x-bw/2,by=y-bh-8;
+  ctx.fillStyle='rgba(0,0,0,0.45)';
+  ctx.beginPath();ctx.roundRect(bx+3,by+3,bw,bh,10);ctx.fill();
+  ctx.fillStyle='rgba(12,10,20,0.92)';
+  ctx.beginPath();ctx.roundRect(bx,by,bw,bh,10);ctx.fill();
+  ctx.strokeStyle=borderColor;ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.roundRect(bx,by,bw,bh,10);ctx.stroke();
+  ctx.fillStyle='rgba(12,10,20,0.92)';
+  ctx.beginPath();ctx.moveTo(x-8,by+bh);ctx.lineTo(x,by+bh+10);ctx.lineTo(x+8,by+bh);ctx.fill();
+  ctx.strokeStyle=borderColor;ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(x-8,by+bh);ctx.lineTo(x,by+bh+10);ctx.lineTo(x+8,by+bh);ctx.stroke();
+  ctx.fillStyle='#ffffff';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(text,x,by+bh/2+1);
+}
+
+function drawPartyAllies(){
+  if(!getTheme().allies||!partyAllies.length)return;
+  if(boss&&gameState==='playing'){
+    barrierPulse+=0.06;
+    const pulse=0.55+Math.sin(barrierPulse)*0.2;
+    const g0=ctx.createLinearGradient(0,barrierY-14,0,barrierY+18);
+    g0.addColorStop(0,'rgba(60,140,255,0)');
+    g0.addColorStop(0.35,`rgba(100,180,255,${0.12*pulse})`);
+    g0.addColorStop(0.5,`rgba(140,210,255,${0.28*pulse})`);
+    g0.addColorStop(0.65,`rgba(100,180,255,${0.12*pulse})`);
+    g0.addColorStop(1,'rgba(60,140,255,0)');
+    ctx.fillStyle=g0;ctx.fillRect(0,barrierY-14,canvas.width,32);
+    ctx.strokeStyle=`rgba(160,220,255,${0.55+pulse*0.25})`;ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.moveTo(0,barrierY);ctx.lineTo(canvas.width,barrierY);ctx.stroke();
+    ctx.strokeStyle=`rgba(200,240,255,${0.25*pulse})`;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(0,barrierY-4);ctx.lineTo(canvas.width,barrierY-4);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,barrierY+4);ctx.lineTo(canvas.width,barrierY+4);ctx.stroke();
+    for(let i=0;i<12;i++){
+      const rx=(i+0.5)*(canvas.width/12);
+      ctx.fillStyle=`rgba(180,230,255,${0.35+Math.sin(barrierPulse+i)*0.2})`;
+      ctx.beginPath();ctx.arc(rx,barrierY,2.2,0,Math.PI*2);ctx.fill();
+    }
+  }
+  partyAllies.forEach(a=>{
+    const img=friendSprites[a.key];
+    if(img){const scale=a.size/img.height;const dw=img.width*scale;ctx.drawImage(img,a.x-dw/2,a.y,dw,a.size)}
+    else{ctx.fillStyle='#888';ctx.fillRect(a.x-20,a.y,40,a.size)}
+    const nome=a.key.charAt(0).toUpperCase()+a.key.slice(1);
+    ctx.font='bold 11px "Palatino Linotype",Georgia,serif';ctx.textAlign='center';
+    ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillText(nome,a.x+1,a.y-5);
+    ctx.fillStyle='#e8d5a3';ctx.fillText(nome,a.x,a.y-6);
+  });
+  if(lucianBalloon&&lucianBalloon.timer>0){
+    const luc=partyAllies.find(a=>a.key==='lucian');
+    if(luc)drawSpeechBalloon(luc.x,luc.y-6,lucianBalloon.text,'#7ec8ff');
+  }
+  if(lioraBalloon&&lioraBalloon.timer>0){
+    const li=partyAllies.find(a=>a.key==='liora');
+    if(li)drawSpeechBalloon(li.x,li.y-6,lioraBalloon.text,'#ffb0e0');
+  }
+}
+
+/* ===== MENU PRINCIPAL ===== */
+function setupMenuButtons(){
+  const cx=canvas.width/2,cy=canvas.height/2;
+  menuButtons=[
+    {text:'Novo Jogo',x:cx-140,y:cy-10,w:280,h:52,action:()=>{startNewGame()}},
+    {text:'Carregar Jogo',x:cx-140,y:cy+60,w:280,h:52,action:()=>{if(loadGame()){}else{saveMsgTimer=90}},disabled:!hasSave}
+  ];
+}
+function setupPauseButtons(){
+  const cx=canvas.width/2,cy=canvas.height/2;
+  pauseButtons=[
+    {text:'Continuar',x:cx-130,y:cy-30,w:260,h:46,action:()=>{isPaused=false}},
+    {text:'Salvar Jogo',x:cx-130,y:cy+30,w:260,h:46,action:()=>{saveGame()}},
+    {text:'Menu Principal',x:cx-130,y:cy+90,w:260,h:46,action:()=>{isPaused=false;gameState='menu';setupMenuButtons();skipBtn.style.display='none'}}
+  ];
+}
+
+function startNewGame(){
+  dialogIndex=0;
+  gameState='present_heros';
+  skipBtn.style.display='none';
+}
+
+const dialogs=[
+  {type:'present',speaker:'Heros',portrait:'heros',text:'Este é você: Heros, um guerreiro forte e destemido. Seu vilarejo foi destruído por monstros poderosos que conseguiram romper o selo da torre. Você e seus amigos estavam explorando a floresta e, por um milagre, sobreviveram. Porém, perderam a família e o lar. Nenhum de vocês jamais superou esse trauma. E você prometeu vingança.'},
+  {type:'story',speaker:'',portrait:null,text:'Em um mundo de magia existe uma torre, o lar dos monstros. Da torre saíam criaturas que espalhavam caos pelo mundo, até que o herói do passado — considerado uma lenda — sacrificou a própria vida para selar a torre.'},
+  {type:'story',speaker:'',portrait:null,text:'Mas o selo era temporário. Cem anos depois, ele começa a se romper. Os monstros voltarão a sair. E quando o rei deles surgir junto, a humanidade não terá chance.'},
+  {type:'story',speaker:'',portrait:null,text:'A humanidade reuniu os guerreiros mais fortes para entrar na torre antes que o selo se quebrasse. Porém, alguns só se preocupavam consigo mesmos. Outros tinham medo. Ninguém se atreveu a ir.'},
+  {type:'story',speaker:'',portrait:null,text:'Até que surgiu um guerreiro destemido. Aquele que declarou que entraria na torre sozinho, com coragem e uma fúria que queimava como o sol. Seu nome era Heros.'},
+  {type:'meeting',speaker:'Vozes',portrait:null,text:'Você vai sozinho? Está louco? Deve ser piada!'},
+  {type:'meeting',speaker:'Mago Ancião',portrait:'mago-anciao',text:'Heros, com o seu nível de poder, sendo um cavaleiro forte e habilidoso com magia, é provável que você limpe os primeiros andares com facilidade. Mas e os andares superiores? E o rei deles? Você não conseguirá sozinho.'},
+  {type:'meeting',speaker:'Heros',portrait:'heros',text:'Eu darei um fim a esses monstros malditos que destruíram nosso lar. Vou entrar lá e fazer com que sofram. Darei minha vida por isso. Matarei o máximo que puder. Quando eu cair, juntem o maior exército possível e enfrentem apenas o rei deles. Isso ajuda, não é?'},
+  {type:'meeting',speaker:'Mago Ancião',portrait:'mago-anciao',text:'De fato, seria possível vencer enfrentando somente o rei... com baixas e muito esforço. Mas, Heros, não será um caminho tranquilo. Seu ódio, por mais forte que seja, pode não ser o suficiente.'},
+  {type:'meeting',speaker:'Heros',portrait:'heros',text:'Será o suficiente. Eles conhecerão o medo. Já está decidido. Estou pronto. Partirei agora, depois de me despedir dos meus companheiros. Juntem os mais habilidosos.'},
+  {type:'meeting',speaker:'Mago Ancião',portrait:'mago-anciao',text:'Entendido. Não temos escolha. Eu lhe desejo sorte. Que as almas dos guerreiros e do herói da lenda estejam com você. Adeus, meu rapaz. Foi uma honra lutar ao seu lado.'},
+  {type:'meeting',speaker:'Heros',portrait:'heros',text:'Digo o mesmo. Adeus, guerreiros.'},
+  {type:'friends',speaker:'',portrait:null,text:'Heros encontra seus amigos: Liora e os irmãos Valeria e Lucian.'},
+  {type:'friends',speaker:'Valeria',portrait:'valeria',text:'Isso é loucura, Heros. Por favor, reconsidere. Por nós. Não deixaremos que você parta.'},
+  {type:'friends',speaker:'Liora',portrait:'liora',text:'Por favor, Heros...'},
+  {type:'friends',speaker:'Lucian',portrait:'lucian',text:'Vamos lá, cara... assim não dá. Não vai ser um caminho tranquilo.'},
+  {type:'friends',speaker:'Heros',portrait:'heros',text:'Já estou decidido. Não temos escolha. Vocês são as pessoas mais importantes do mundo para mim.'},
+  {type:'friends',speaker:'Valeria',portrait:'valeria',text:'Então iremos com você.'},
+  {type:'friends',speaker:'Heros',portrait:'heros',text:'Vocês não conseguem. O passado ainda nos assombra. Você tem medo, Valeria, mas não é culpa sua. Olhe para o seu irmão e para a Liora... eles não vão conseguir. Não é culpa de vocês. Vocês terão que enfrentar o rei. Recomponham-se, amigos. Tragam a paz à humanidade e não morram. Depois, vivam felizes.'},
+  {type:'friends',speaker:'Valeria',portrait:'valeria',text:'...'},
+  {type:'friends',speaker:'Liora',portrait:'liora',text:'...'},
+  {type:'friends',speaker:'Lucian',portrait:'lucian',text:'...'},
+  {type:'friends',speaker:'Heros',portrait:'heros',text:'Não temos escolha. Adeus, amigos. Obrigado por tudo. Darei minha vida pelo nosso lar. Adeus.'},
+  {type:'friends',speaker:'',portrait:null,text:'Heros parte, deixando seus amigos que choram ao ver sua partida, com culpa e dor. Eles se despedem de você.'},
+  {type:'tower',speaker:'',portrait:null,text:'Heros chega à torre. A barreira repele monstros, mas não tem efeito em humanos. Ele entra sem problemas.'},
+  {type:'tower',speaker:'Heros',portrait:'heros',text:'Respirando fundo, com fúria e determinação, Heros lembra da promessa de vingança que fez diante do seu vilarejo destruído. Com o foco renovado, ele avança.'}
+];
+
+const rescueDialogs=[
+  {speaker:'',portrait:null,text:'Seus amigos vieram ao seu resgate. Em lágrimas, eles te salvaram.'},
+  {speaker:'Liora',portrait:'liora',text:'Heros, estamos aqui. Estamos com você.'},
+  {speaker:'Valeria',portrait:'valeria',text:'Heros... somos nós.'},
+  {speaker:'Heros',portrait:'heros',text:'Meus amigos? O que vocês fazem aqui? Eu... estou vivo?'},
+  {speaker:'Lucian',portrait:'lucian',text:'Sim, está. Por favor, Heros, nos perdoe. Nossa covardia fez você ficar sozinho.'},
+  {speaker:'Liora',portrait:'liora',text:'Encontramos várias manchas de sangue pelos andares. Nos perdoe, Heros. Nosso medo fez você passar por tudo sozinho.'},
+  {speaker:'Valeria',portrait:'valeria',text:'Sentimos muito, Heros. Nos perdoe. Não somos dignos de ser seus amigos. Abandonamos você e te demos as costas por medo. Estamos aqui agora... e isso nunca mais se repetirá. Prometemos, nosso amigo querido.'},
+  {speaker:'',portrait:null,text:'O choro de seus amigos te comove.'},
+  {speaker:'Heros',portrait:'heros',text:'Meus queridos amigos... obrigado. Vocês já fizeram o suficiente. Vocês nunca me abandonaram. O medo em seus corações não é culpa de vocês. Voltem, amigos. Eu irei sozinho. Não se culpem por não terem vindo.'},
+  {speaker:'Liora',portrait:'liora',text:'Não, Heros. Você sempre foi protetor, sempre nos protegeu. Não vamos te deixar sozinho nunca mais. Sentimos muita vergonha por te abandonar, e levaremos essa culpa para o túmulo... mas nunca mais acontecerá. Estamos juntos agora. Você não está mais sozinho.'},
+  {speaker:'Lucian',portrait:'lucian',text:'Estamos com você, irmão. Daremos um fim nisso juntos. E se morrermos... morreremos juntos.'},
+  {speaker:'Valeria',portrait:'valeria',text:'Liora e meu irmão estão certos. Nunca mais você ficará sozinho. Iremos juntos. Você é o mais forte, e sempre vai ser. Eu também consigo usar magia. Não sou forte igual a você, então ficarei na retaguarda com Liora e Lucian, te dando suporte para não te atrapalhar.'},
+  {speaker:'Heros',portrait:'heros',text:'Amigos, por favor não se culpem. Vocês não fizeram nada de errado. Vocês são teimosos, então sei que não adianta discutir. Vamos juntos, amigos. Vingaremos nosso lar.'},
+  {speaker:'Liora',portrait:'liora',text:'Sim, Heros.'},
+  {speaker:'Lucian',portrait:'lucian',text:'Vamo com tudo.'},
+  {speaker:'Valeria',portrait:'valeria',text:'Daremos um fim a esses vermes imundos. Juntos.'},
+  {speaker:'',portrait:null,text:'Com lágrimas de felicidade, seus amigos respondem. Pela primeira vez em dias, Heros não está sozinho.'}
+];
+
+const tempestasDialogs=[
+  {speaker:'',portrait:null,text:'Depois de entrar no andar, eles encontram uma elfa assustadora e com uma presença pesada.'},
+  {speaker:'Tempestas',portrait:'tempestas',text:'Vejo que tem intrusos na torre... que surpresa. Meu nome é Tempestas, e vocês, pequenos insignificantes, não passarão por mim.'},
+  {speaker:'',portrait:null,text:'Todos ficam confusos e sentem a presença pesada.'},
+  {speaker:'Liora',portrait:'liora',text:'Ela fala nossa língua? Como?'},
+  {speaker:'Tempestas',portrait:'tempestas',text:'Eu sou um monstro de elite, pequena. Consegui aprender umas palavras devorando uns humanos.'},
+  {speaker:'Valeria',portrait:'valeria',text:'Essa maldita...'},
+  {speaker:'Lucian',portrait:'lucian',text:'Você irá pagar, sua monstra maldita.'},
+  {speaker:'Heros',portrait:'heros',text:'Em formação. Vamos pra cima.'},
+  {speaker:'Liora',portrait:'liora',text:'Te daremos suporte, Heros. Estamos com você.'},
+  {speaker:'Valeria',portrait:'valeria',text:'Vá com tudo, Heros.'}
+];
+
+function advanceDialog(){
+  dialogIndex++;
+  if(dialogIndex>=dialogs.length){startGameplay();return}
+  const d=dialogs[dialogIndex];
+  if(d.type==='present')gameState='present_heros';
+  else if(d.type==='story')gameState='story';
+  else if(d.type==='meeting')gameState='meeting';
+  else if(d.type==='friends')gameState='friends';
+  else if(d.type==='tower')gameState='tower';
+}
+
+function startGameplay(){
+  gameState='playing';isPaused=false;floorIndex=0;
+  killsNeeded=20;kills=0;totalKills=0;enemySpeed=0.55;
+  swordDmg=1;fireDmg=1;tripleFire=false;scaleAfter80=0;
+  swordRange=70;swordHit=58;
+  player.baseSpeed=3.8;player.speed=3.8;
+  player.maxHp=10;player.hp=10;
+  player.x=canvas.width/2-player.size/2;player.y=canvas.height/2-player.size/2;
+  player.angle=Math.PI/2;player.dir='baixo';player.state='parado';player.frame=0;
+  player.attackCooldown=0;player.fireCooldown=0;player.slashTimer=0;player.invincible=0;
+  enemies=[];fireballs=[];enemyShots=[];particles=[];deathButtons=[];healParticles=[];
+  rescueMonsters=[];friendActors=[];friendShots=[];showFriends=false;dialogFade=0;
+  partyAllies=[];flameParticles=[];boss=null;bossProjectiles=[];groundMarks=[];
+  lucianBalloon=null;lioraBalloon=null;openingDone=false;openingWait=0;tempestasDialogIndex=0;
+  transitionBtn=null;pendingSpecial=null;post96Step=0;rescueStep=0;
+  skipBtn.style.display='block';
+  setupFloorSpawn();
+}
+
+function setupFloorSpawn(){
+  const f=currentFloorData();
+  enemies=[];fireballs=[];enemyShots=[];particles=[];kills=0;flameParticles=[];
+  boss=null;bossProjectiles=[];groundMarks=[];lucianBalloon=null;lioraBalloon=null;openingDone=false;openingWait=0;
+  if(f.allies)setupPartyAllies();else partyAllies=[];
+
+  if(f.type==='boss98'){
+    tempestasDialogIndex=0;
+    gameState='tempestas_dialog';
+    skipBtn.style.display='none';
+    return;
+  }
+  if(f.type==='empty'){totalToSpawn=0;killsNeeded=0;maxConcurrent=0;spawnQueue=0;return}
+
+  if(f.type==='big'){totalToSpawn=10;killsNeeded=10;maxConcurrent=4}
+  else if(f.type==='mage'){totalToSpawn=f.count;killsNeeded=f.count;maxConcurrent=3}
+  else if(f.type==='scale'){totalToSpawn=f.count||22;killsNeeded=totalToSpawn;maxConcurrent=5}
+  else if(f.type==='shadow'){totalToSpawn=f.count;killsNeeded=f.count;maxConcurrent=5}
+  else if(f.type==='guardian'){totalToSpawn=f.count;killsNeeded=f.count;maxConcurrent=6}
+  else if(f.type==='mega'){totalToSpawn=f.count;killsNeeded=f.count;maxConcurrent=1}
+  else if(f.type==='mix90'){mixSpawnState={meleeLeft:10,shooterLeft:3};totalToSpawn=13;killsNeeded=13;maxConcurrent=4}
+  else if(f.type==='mix96'){mixSpawnState={meleeLeft:15,shooterLeft:6};totalToSpawn=21;killsNeeded=21;maxConcurrent=7}
+  else if(f.type==='mix97'){mixSpawnState={meleeLeft:15,shooterLeft:6};totalToSpawn=21;killsNeeded=21;maxConcurrent=7}
+  else if(f.type==='late'||f.type==='garden'){totalToSpawn=f.count;killsNeeded=f.count;maxConcurrent=5}
+  else if(f.type==='mirror'){totalToSpawn=f.count;killsNeeded=f.count;maxConcurrent=3}
+  else{totalToSpawn=killsNeeded;maxConcurrent=Math.min(6,killsNeeded)}
+  spawnQueue=totalToSpawn;spawnTimer=0;
+  const initial=Math.min(maxConcurrent,spawnQueue);
+  for(let i=0;i<initial;i++){spawnOneEnemy();spawnQueue--}
+}
+
+function startTempestasBattle(){
+  gameState='playing';
+  skipBtn.style.display='block';
+  setupPartyAllies();
+  player.maxHp=10+floorIndex*10;
+  player.hp=player.maxHp;
+  player.x=canvas.width/2-player.size/2;
+  player.y=canvas.height*0.45;
+  player.invincible=0;
+  const maxH=Math.min(canvas.height*0.22,120);
+  const img=tempestasSp;
+  const dw=img?img.width*(maxH/img.height):80;
+  boss={
+    x:(canvas.width-dw)/2,y:18,w:dw,h:maxH,
+    hp:470,maxHp:470,
+    shootCd:90,phase:0,phaseTimer:0,anim:0
+  };
+  bossProjectiles=[];
+  groundMarks=[];
+  allyShootTimer=600;
+  openingDone=false;
+  openingWait=0;
+  lucianBalloon=null;
+  lioraBalloon=null;
+}
+
+function spawnOneEnemy(){
+  const f=currentFloorData();
+  let size=28,hp=1,spd=enemySpeed,dmg=1,canShoot=false,kind='normal';
+  const sc=scaleAfter80,extraDmg=(floorOrder[floorIndex]>=16)?2:0;
+  if(f.type==='big'){size=84;hp=4;spd=0.72;dmg=5;kind='big'}
+  else if(f.type==='mage'){size=42;hp=f.hp||8;spd=0.36;dmg=5;canShoot=true}
+  else if(f.type==='scale'){size=32;hp=3;spd=enemySpeed*1.12;dmg=2}
+  else if(f.type==='shadow'){size=34;hp=f.hp||6;spd=0.62;dmg=4}
+  else if(f.type==='guardian'){size=36;hp=(f.hp||10)+sc;spd=0.55;dmg=5+sc+extraDmg}
+  else if(f.type==='mega'){size=90;hp=(f.hp||80)+sc;spd=1.1;dmg=22+sc+extraDmg;kind='mega'}
+  else if(f.type==='mix90'){
+    const hasShooter=enemies.filter(e=>e.alive&&e.canShoot).length;
+    if(mixSpawnState.shooterLeft>0&&hasShooter<1){mixSpawnState.shooterLeft--;size=40;hp=10+sc;spd=0.34;dmg=6+sc+extraDmg;canShoot=true}
+    else{mixSpawnState.meleeLeft=Math.max(0,mixSpawnState.meleeLeft-1);size=32;hp=10+sc;spd=0.58;dmg=5+sc+extraDmg}
+  }
+  else if(f.type==='mix96'){
+    const shootersAlive=enemies.filter(e=>e.alive&&e.canShoot).length;
+    const meleeAlive=enemies.filter(e=>e.alive&&!e.canShoot).length;
+    if(mixSpawnState.shooterLeft>0&&shootersAlive<2){mixSpawnState.shooterLeft--;size=40;hp=12+sc;spd=0.34;dmg=7+sc+extraDmg;canShoot=true}
+    else if(mixSpawnState.meleeLeft>0&&meleeAlive<5){mixSpawnState.meleeLeft--;size=26;hp=8+sc;spd=0.85;dmg=5+sc+extraDmg}
+    else if(mixSpawnState.shooterLeft>0){mixSpawnState.shooterLeft--;size=40;hp=12+sc;spd=0.34;dmg=7+sc+extraDmg;canShoot=true}
+    else{mixSpawnState.meleeLeft=Math.max(0,mixSpawnState.meleeLeft-1);size=26;hp=8+sc;spd=0.85;dmg=5+sc+extraDmg}
+  }
+  else if(f.type==='mix97'){
+    const shootersAlive=enemies.filter(e=>e.alive&&e.canShoot).length;
+    const meleeAlive=enemies.filter(e=>e.alive&&!e.canShoot).length;
+    if(mixSpawnState.shooterLeft>0&&shootersAlive<2){mixSpawnState.shooterLeft--;size=40;hp=12+sc;spd=0.34;dmg=7+sc+extraDmg;canShoot=true}
+    else if(mixSpawnState.meleeLeft>0&&meleeAlive<5){mixSpawnState.meleeLeft--;size=70;hp=18+sc;spd=0.45;dmg=8+sc+extraDmg;kind='big'}
+    else if(mixSpawnState.shooterLeft>0){mixSpawnState.shooterLeft--;size=40;hp=12+sc;spd=0.34;dmg=7+sc+extraDmg;canShoot=true}
+    else{mixSpawnState.meleeLeft=Math.max(0,mixSpawnState.meleeLeft-1);size=70;hp=18+sc;spd=0.45;dmg=8+sc+extraDmg;kind='big'}
+  }
+  else if(f.type==='late'){size=34;hp=(f.hp||13)+sc;spd=0.58;dmg=7+sc+extraDmg}
+  else if(f.type==='garden'){size=36;hp=(f.hp||22)+sc;spd=0.5;dmg=7+sc+extraDmg}
+  else if(f.type==='mirror'){size=38;hp=(f.hp||25)+sc;spd=0.52;dmg=8+sc+extraDmg;canShoot=Math.random()>0.5}
+  else{hp=1+sc;dmg=1+sc+extraDmg;spd=enemySpeed+sc*0.03}
+
+  let side;
+  if(isLateSpawn())side=Math.floor(Math.random()*3);
+  else side=Math.floor(Math.random()*4);
+  let x,y;
+  if(side===0){x=Math.random()*canvas.width;y=-size-20}
+  else if(side===1){x=canvas.width+size+20;y=Math.random()*canvas.height*0.7}
+  else if(side===2){x=-size-20;y=Math.random()*canvas.height*0.7}
+  else{x=Math.random()*canvas.width;y=canvas.height+size+20}
+  enemies.push({x,y,size,hp,maxHp:hp,speed:spd,damage:dmg,alive:true,anim:Math.random()*Math.PI*2,canShoot,shootCd:canShoot?(80+Math.random()*50):0,kind});
+}
+
+function createFireball(){
+  if(player.fireCooldown>0||isPaused)return;
+  const speed=9.5,base=player.angle;
+  const angles=tripleFire?[base-0.28,base,base+0.28]:[base];
+  angles.forEach(a=>{fireballs.push({x:player.x+player.size/2,y:player.y+player.size/2,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed,size:13,life:85,dmg:fireDmg})});
+  player.fireCooldown=28;
+}
+function swordAttack(){
+  if(player.attackCooldown>0||player.state==='ataque'||isPaused)return;
+  player.state='ataque';player.frame=0;player.frameTimer=0;player.attackCooldown=22;player.slashTimer=16;
+  const ax=player.x+player.size/2+Math.cos(player.angle)*(swordRange*0.55);
+  const ay=player.y+player.size/2+Math.sin(player.angle)*(swordRange*0.55);
+  enemies.forEach(e=>{if(!e.alive)return;const dx=e.x+e.size/2-ax,dy=e.y+e.size/2-ay;if(Math.sqrt(dx*dx+dy*dy)<swordHit+(e.size-28)*0.25)damageEnemy(e,swordDmg)});
+  if(boss&&boss.hp>0){
+    const bx=boss.x+boss.w/2,by=boss.y+boss.h*0.5;
+    const dx=bx-ax,dy=by-ay;
+    if(Math.sqrt(dx*dx+dy*dy)<swordHit+40){
+      boss.hp-=swordDmg;
+      for(let i=0;i<4;i++)particles.push({x:bx,y:by,vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*5,size:3,life:15,color:'#c080ff'});
+      if(boss.hp<=0){boss.hp=0;onBossDefeated()}
+    }
+  }
+}
+function damageEnemy(enemy,dmg){
+  enemy.hp-=dmg;
+  if(enemy.hp<=0){
+    enemy.alive=false;kills++;totalKills++;
+    for(let i=0;i<8;i++)particles.push({x:enemy.x+enemy.size/2,y:enemy.y+enemy.size/2,vx:(Math.random()-0.5)*7,vy:(Math.random()-0.5)*7,size:3+Math.random()*3,life:22+Math.random()*12,color:`hsl(${Math.random()*40+10},85%,55%)`});
+    checkFloorClear();
+  }
+}
+function onBossDefeated(){
+  totalKills++;
+  for(let i=0;i<40;i++)particles.push({x:boss.x+boss.w/2,y:boss.y+boss.h/2,vx:(Math.random()-0.5)*8,vy:(Math.random()-0.5)*8,size:3+Math.random()*4,life:30+Math.random()*20,color:`hsl(${270+Math.random()*40},80%,60%)`});
+  boss=null;bossProjectiles=[];groundMarks=[];
+  gameState='floor_clear';clearTimer=180;pendingSpecial=null;
+}
+function checkFloorClear(){
+  const f=currentFloorData();
+  if(f.type==='empty'||f.type==='boss98')return;
+  const alive=enemies.some(e=>e.alive);
+  if(!alive&&spawnQueue<=0&&kills>=killsNeeded){
+    pendingSpecial=null;
+    if(f.name.includes('Andar 10'))pendingSpecial='post10';
+    else if(f.name.includes('Andar 50'))pendingSpecial='post50';
+    else if(f.name.includes('Andar 60'))pendingSpecial='post60';
+    else if(f.name.includes('Andar 80'))pendingSpecial='post80';
+    else if(f.name.includes('Andar 93'))pendingSpecial='post93';
+    else if(f.name.includes('Andar 96'))pendingSpecial='post96';
+    else if(f.name.includes('Andar 97'))pendingSpecial='pre_rescue';
+    gameState='floor_clear';clearTimer=180;
+  }
+}
+function afterClearSequence(){
+  if(pendingSpecial==='post10'){post10Step=0;gameState='post10';pendingSpecial=null;return}
+  if(pendingSpecial==='post50'){gameState='post50';pendingSpecial=null;return}
+  if(pendingSpecial==='post60'){gameState='post60';pendingSpecial=null;return}
+  if(pendingSpecial==='post80'){gameState='post80';pendingSpecial=null;return}
+  if(pendingSpecial==='post93'){gameState='post93';pendingSpecial=null;return}
+  if(pendingSpecial==='post96'){post96Step=0;gameState='post96';pendingSpecial=null;return}
+  if(pendingSpecial==='pre_rescue'){gameState='pre_rescue';pendingSpecial=null;return}
+  goToTransition();
+}
+
+function startRescueCutscene(){
+  gameState='rescue';rescueStep=0;rescueTimer=0;healParticles=[];particles=[];friendShots=[];
+  showFriends=false;dialogFade=0;player.hp=2;
+  player.x=canvas.width/2-22;player.y=canvas.height*0.58;
+  const cx=canvas.width/2,frontY=-100;
+  rescueMonsters=[
+    {x:cx-39,y:frontY,size:78,speed:0.30,alive:true,anim:0,alpha:1,dying:false},
+    {x:cx-39-95,y:frontY-70,size:74,speed:0.28,alive:true,anim:1,alpha:1,dying:false},
+    {x:cx-39+95,y:frontY-70,size:74,speed:0.28,alive:true,anim:2,alpha:1,dying:false}
+  ];
+  const baseY=canvas.height+50,stopY=canvas.height-92;
+  friendActors=[
+    {key:'valeria',x:canvas.width*0.25,y:baseY,ty:stopY,size:56},
+    {key:'lucian',x:canvas.width*0.50,y:baseY,ty:stopY,size:56},
+    {key:'liora',x:canvas.width*0.75,y:baseY,ty:stopY,size:56}
+  ];
+}
+function hitboxTouch(m){const hs=44;return m.x<player.x+hs&&m.x+m.size>player.x&&m.y<player.y+hs&&m.y+m.size>player.y}
+
+function goToTransition(){
+  pendingFloorIndex=floorIndex+1;
+  if(pendingFloorIndex>=floorOrder.length){gameState='victory';transitionBtn=null;skipBtn.style.display='none';return}
+  transitionName=floors[floorOrder[pendingFloorIndex]].name;
+  const cx=canvas.width/2,cy=canvas.height/2;
+  transitionBtn={text:'Próximo Andar',x:cx-120,y:cy+50,w:240,h:48};
+  gameState='floor_transition';
+}
+function applyNextFloor(){
+  floorIndex=pendingFloorIndex;
+  const f=currentFloorData();
+  if(floorOrder[floorIndex]>=12){player.speed=player.baseSpeed*1.12;swordRange=82;swordHit=66}
+  else{player.speed=player.baseSpeed;swordRange=70;swordHit=58}
+  if(floorOrder[floorIndex]>=11){swordDmg=2;fireDmg=3}
+  if(floorOrder[floorIndex]>=14){tripleFire=true}
+  if(floorOrder[floorIndex]>=15){const extra=floorOrder[floorIndex]-14;swordDmg=2+extra;fireDmg=3+extra;tripleFire=true}
+  if(floorOrder[floorIndex]>=16)scaleAfter80=floorOrder[floorIndex]-15;else scaleAfter80=0;
+  if(f.type==='normal'||f.type==='scale'){
+    if(floorIndex<3){killsNeeded=Math.floor(killsNeeded*1.8);enemySpeed*=1.25}
+    else if(floorIndex===3){killsNeeded=Math.floor(killsNeeded*1.4);enemySpeed*=1.15}
+    else if(f.type==='scale')enemySpeed*=1.08;
+  }
+  player.maxHp=10+floorIndex*10;player.hp=player.maxHp;
+  player.x=canvas.width/2-player.size/2;player.y=canvas.height/2-player.size/2;
+  player.state='parado';player.frame=0;player.attackCooldown=0;player.fireCooldown=0;player.slashTimer=0;player.invincible=45;
+  transitionBtn=null;setupFloorSpawn();
+  if(gameState!=='tempestas_dialog'){gameState='playing';skipBtn.style.display='block'}
+}
+function forceSkipFloor(){
+  if(gameState!=='playing')return;
+  if(boss){boss.hp=0;onBossDefeated();return}
+  if(currentFloorData().type==='empty'){goToTransition();return}
+  enemies.forEach(e=>e.alive=false);spawnQueue=0;kills=killsNeeded;checkFloorClear();
+}
+function resetGame(){startGameplay()}
+function restartFloor(){
+  kills=0;isPaused=false;player.hp=player.maxHp;
+  player.x=canvas.width/2-player.size/2;player.y=canvas.height/2-player.size/2;
+  player.state='parado';player.frame=0;player.attackCooldown=0;player.fireCooldown=0;player.slashTimer=0;player.invincible=0;
+  enemies=[];fireballs=[];enemyShots=[];particles=[];deathButtons=[];
+  if(currentFloorData().type==='boss98')startTempestasBattle();
+  else setupFloorSpawn();
+  gameState='playing';
+}
+function createDeathButtons(){
+  const cx=canvas.width/2,cy=canvas.height/2;
+  deathButtons=[
+    {text:'Reiniciar Andar',x:cx-130,y:cy+50,w:260,h:48,action:()=>restartFloor()},
+    {text:'Reiniciar do Início',x:cx-130,y:cy+115,w:260,h:48,action:()=>resetGame()}
+  ];
+}
+function togglePause(){
+  if(gameState!=='playing')return;
+  isPaused=!isPaused;
+  if(isPaused)setupPauseButtons();
+}
+function hitButton(mx,my,btn){return btn&&mx>=btn.x&&mx<=btn.x+btn.w&&my>=btn.y&&my<=btn.y+btn.h}
+
+function onAdvance(){
+  if(['present_heros','story','meeting','friends','tower'].includes(gameState)){advanceDialog();return}
+  if(gameState==='post10'){post10Step++;if(post10Step>=3)goToTransition();return}
+  if(['post50','post60','post80','post93'].includes(gameState)){goToTransition();return}
+  if(gameState==='post96'){post96Step++;if(post96Step>=2)goToTransition();return}
+  if(gameState==='pre_rescue'){startRescueCutscene();return}
+  if(gameState==='tempestas_dialog'){
+    tempestasDialogIndex++;
+    if(tempestasDialogIndex>=tempestasDialogs.length)startTempestasBattle();
+    return;
+  }
+  if(gameState==='rescue'){
+    if(rescueStep<4)return;
+    if(rescueStep===4){
+      rescueStep=5;rescueTimer=0;
+      for(let i=0;i<50;i++)healParticles.push({x:player.x+22+(Math.random()-0.5)*40,y:player.y+18+(Math.random()-0.5)*30,vx:(Math.random()-0.5)*1.3,vy:-1.1-Math.random()*2,life:40+Math.random()*40,size:2+Math.random()*4,color:`hsla(${100+Math.random()*40},95%,65%,0.95)`});
+      player.hp=player.maxHp;return;
+    }
+    if(rescueStep===5){rescueStep=6;return}
+    if(rescueStep>=6){rescueStep++;if(rescueStep-6>=rescueDialogs.length)goToTransition()}
+    return;
+  }
+  if(gameState==='victory'){gameState='menu';setupMenuButtons()}
+}
+
+skipBtn.addEventListener('click',e=>{e.preventDefault();forceSkipFloor()});
+skipBtn.addEventListener('touchstart',e=>{e.preventDefault();forceSkipFloor()},{passive:false});
+window.addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(e.code==='Space'){e.preventDefault();if(gameState==='playing')togglePause();else if(gameState==='floor_transition')applyNextFloor();else if(gameState!=='floor_clear'&&gameState!=='menu')onAdvance()}
+  if(e.code==='Enter'||e.code==='KeyZ'){if(gameState==='floor_transition')applyNextFloor();else if(gameState!=='floor_clear'&&gameState!=='menu')onAdvance()}
+});
+window.addEventListener('keyup',e=>keys[e.code]=false);
+canvas.addEventListener('mousedown',e=>{
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  if(gameState==='menu'){menuButtons.forEach(b=>{if(!b.disabled&&hitButton(mx,my,b))b.action()});return}
+  if(gameState==='playing'&&isPaused){pauseButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
+  if(gameState==='dead'){deathButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
+  if(gameState==='floor_transition'){if(hitButton(mx,my,transitionBtn))applyNextFloor();return}
+  if(gameState==='floor_clear')return;
+  if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','victory'].includes(gameState)){onAdvance();return}
+  if(gameState==='playing'&&!isPaused){if(e.button===0)mouse.left=true;if(e.button===2)mouse.right=true}
+});
+canvas.addEventListener('mouseup',e=>{if(e.button===0)mouse.left=false;if(e.button===2)mouse.right=false});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+joyZone.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();if(joyActive||isPaused||gameState!=='playing')return;const t=e.changedTouches[0];joyActive=true;joyTouchId=t.identifier;handleJoy(t)},{passive:false});
+joyZone.addEventListener('touchmove',e=>{e.preventDefault();e.stopPropagation();if(!joyActive)return;for(let t of e.changedTouches)if(t.identifier===joyTouchId){handleJoy(t);break}},{passive:false});
+function endJoy(e){for(let t of e.changedTouches)if(t.identifier===joyTouchId){joyActive=false;joyTouchId=null;joyDX=0;joyDY=0;joyKnob.style.top='30px';joyKnob.style.left='30px';break}}
+joyZone.addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation();endJoy(e)},{passive:false});
+joyZone.addEventListener('touchcancel',e=>{e.preventDefault();endJoy(e)},{passive:false});
+function handleJoy(touch){const rect=joyZone.getBoundingClientRect();const cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;let dx=touch.clientX-cx,dy=touch.clientY-cy;const dist=Math.sqrt(dx*dx+dy*dy),maxD=38;if(dist>maxD){dx=dx/dist*maxD;dy=dy/dist*maxD}joyKnob.style.left=(30+dx)+'px';joyKnob.style.top=(30+dy)+'px';joyDX=dx/maxD;joyDY=dy/maxD}
+document.getElementById('fireBtn').addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();if(gameState==='playing'&&!isPaused)createFireball()},{passive:false});
+document.getElementById('pauseBtn').addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();if(gameState==='playing')togglePause()},{passive:false});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const t=e.changedTouches[0];const rect=canvas.getBoundingClientRect();const mx=t.clientX-rect.left,my=t.clientY-rect.top;
+  if(gameState==='menu'){menuButtons.forEach(b=>{if(!b.disabled&&hitButton(mx,my,b))b.action()});return}
+  if(gameState==='playing'&&isPaused){pauseButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
+  if(gameState==='dead'){deathButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
+  if(gameState==='floor_transition'){if(hitButton(mx,my,transitionBtn))applyNextFloor();return}
+  if(gameState==='floor_clear')return;
+  if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','victory'].includes(gameState)){onAdvance();return}
+  if(gameState!=='playing'||isPaused)return;
+  const joyR=joyZone.getBoundingClientRect(),fireR=document.getElementById('fireBtn').getBoundingClientRect(),pauseR=document.getElementById('pauseBtn').getBoundingClientRect();
+  const onJoy=t.clientX>=joyR.left&&t.clientX<=joyR.right&&t.clientY>=joyR.top&&t.clientY<=joyR.bottom;
+  const onFire=t.clientX>=fireR.left&&t.clientX<=fireR.right&&t.clientY>=fireR.top&&t.clientY<=fireR.bottom;
+  const onPause=t.clientX>=pauseR.left&&t.clientX<=pauseR.right&&t.clientY>=pauseR.top&&t.clientY<=pauseR.bottom;
+  if(!onJoy&&!onFire&&!onPause)swordAttack();
+},{passive:false});
+
+function spawnDisintegrate(x,y){
+  for(let i=0;i<18;i++){
+    const a=Math.random()*Math.PI*2,sp=0.4+Math.random()*2.2;
+    particles.push({x:x+(Math.random()-0.5)*20,y:y+(Math.random()-0.5)*20,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-0.5,size:2+Math.random()*4,life:35+Math.random()*30,color:`hsl(${270+Math.random()*40},70%,${40+Math.random()*30}%)`});
+  }
+}
+
+function updateBoss(){
+  if(!boss||boss.hp<=0)return;
+  boss.anim+=0.04;
+  boss.phaseTimer++;
+
+  if(boss.phase===0){
+    openingWait++;
+    if(openingWait===300){
+      const bx=boss.x+boss.w/2,by=boss.y+boss.h*0.65;
+      bossProjectiles.push({type:'homing',x:bx,y:by,vx:0,vy:0,size:22,life:420,hit:false,trail:[]});
+      for(let i=0;i<25;i++){
+        particles.push({x:bx+(Math.random()-0.5)*30,y:by+(Math.random()-0.5)*30,vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5)*2,size:3+Math.random()*3,life:30,color:'#c080ff'});
+      }
+    }
+  }
+  else if(boss.phase===1){
+    if(boss.phaseTimer===1)lucianBalloon={text:'Deixa comigo, Heros!',timer:200};
+    if(boss.phaseTimer===40){
+      for(let i=0;i<50;i++){
+        healParticles.push({x:player.x+24+(Math.random()-0.5)*55,y:player.y+20+(Math.random()-0.5)*45,vx:(Math.random()-0.5)*1.2,vy:-0.9-Math.random()*1.8,life:60+Math.random()*40,size:2+Math.random()*4,color:`hsla(${110+Math.random()*30},95%,65%,0.95)`});
+      }
+      const luc=partyAllies.find(a=>a.key==='lucian');
+      if(luc)for(let i=0;i<30;i++)healParticles.push({x:luc.x+(Math.random()-0.5)*45,y:luc.y+(Math.random()-0.5)*35,vx:(Math.random()-0.5)*0.9,vy:-0.8-Math.random()*1.4,life:50,size:2+Math.random()*3,color:'hsla(190,90%,70%,0.9)'});
+    }
+    if(boss.phaseTimer===70)player.hp=player.maxHp;
+    if(boss.phaseTimer>160){
+      boss.phase=2;boss.phaseTimer=0;openingDone=true;
+      lioraBalloon={text:'Não pise nas manchas no chão, Heros.',timer:220};
+    }
+  }
+  else if(boss.phase===2){
+    boss.shootCd--;
+    if(boss.shootCd<=0){
+      boss.shootCd=65+Math.random()*30;
+      if(Math.random()<0.5){
+        const tx=40+Math.random()*(canvas.width-80);
+        bossProjectiles.push({type:'bolt',x:tx,y:boss.y+boss.h,vx:0,vy:4.4,size:10,life:160,w:12});
+      }else{
+        const bx=boss.x+boss.w/2,by=boss.y+boss.h*0.7;
+        const ang=Math.atan2(player.y+player.size/2-by,player.x+player.size/2-bx);
+        bossProjectiles.push({type:'orb',x:bx,y:by,vx:Math.cos(ang)*3.3,vy:Math.sin(ang)*3.3,size:12,life:150});
+      }
+    }
+    if(Math.random()<0.004&&groundMarks.length<3){
+      const nearX=player.x+player.size/2+(Math.random()-0.5)*140;
+      const nearY=player.y+player.size/2+(Math.random()-0.5)*100;
+      const mx=Math.max(50,Math.min(canvas.width-50,nearX));
+      const my=Math.max(90,Math.min(barrierY-50,nearY));
+      groundMarks.push({x:mx,y:my,r:32,life:480,dmg:16,flash:30,crack:Math.random()*Math.PI*2});
+      for(let i=0;i<14;i++)particles.push({x:mx+(Math.random()-0.5)*12,y:my-60-i*10,vx:(Math.random()-0.5)*1.5,vy:2+Math.random(),size:2+Math.random()*2,life:18+Math.random()*10,color:i%2===0?'#d080ff':'#9060ff'});
+    }
+  }
+
+  if(openingDone){
+    allyShootTimer--;
+    if(allyShootTimer<=0){
+      allyShootTimer=600;
+      partyAllies.forEach(a=>{
+        const bx=boss.x+boss.w/2,by=boss.y+boss.h*0.5;
+        const dx=bx-a.x,dy=by-(a.y+10);
+        const dist=Math.sqrt(dx*dx+dy*dy)||1;
+        bossProjectiles.push({type:'ally',x:a.x,y:a.y+10,vx:dx/dist*5,vy:dy/dist*5,size:9,life:100,dmg:15});
+      });
+    }
+  }
+
+  if(lucianBalloon){lucianBalloon.timer--;if(lucianBalloon.timer<=0)lucianBalloon=null}
+  if(lioraBalloon){lioraBalloon.timer--;if(lioraBalloon.timer<=0)lioraBalloon=null}
+}
+
+function updateBossProjectiles(){
+  for(let i=bossProjectiles.length-1;i>=0;i--){
+    const p=bossProjectiles[i];
+    if(p.type==='homing'&&!p.hit){
+      const tx=player.x+player.size/2,ty=player.y+player.size/2;
+      const ang=Math.atan2(ty-p.y,tx-p.x);
+      p.vx+=Math.cos(ang)*0.12;p.vy+=Math.sin(ang)*0.12;
+      const sp=Math.sqrt(p.vx*p.vx+p.vy*p.vy);
+      if(sp>2.4){p.vx=p.vx/sp*2.4;p.vy=p.vy/sp*2.4}
+      p.x+=p.vx;p.y+=p.vy;p.life--;
+      if(!p.trail)p.trail=[];
+      p.trail.push({x:p.x,y:p.y,life:20});
+      if(p.trail.length>18)p.trail.shift();
+      p.trail.forEach(t=>t.life--);
+      if(Math.hypot(p.x-tx,p.y-ty)<player.size/2+p.size){
+        p.hit=true;p.life=0;
+        player.hp=20;player.invincible=50;
+        if(boss){boss.phase=1;boss.phaseTimer=0}
+        for(let k=0;k<30;k++)particles.push({x:p.x,y:p.y,vx:(Math.random()-0.5)*7,vy:(Math.random()-0.5)*7,size:3+Math.random()*4,life:25,color:'#b060ff'});
+      }
+    }else if(p.type==='bolt'||p.type==='orb'){
+      p.x+=p.vx;p.y+=p.vy;p.life--;
+      if(p.y>=barrierY){
+        p.life=0;
+        for(let k=0;k<10;k++)particles.push({x:p.x+(Math.random()-0.5)*20,y:barrierY,vx:(Math.random()-0.5)*4,vy:-1-Math.random()*2,size:2+Math.random()*2,life:14,color:'#90d0ff'});
+        continue;
+      }
+      if(player.invincible<=0&&Math.hypot(p.x-(player.x+player.size/2),p.y-(player.y+player.size/2))<player.size/2+p.size){
+        player.hp-=p.type==='bolt'?11:9;
+        player.invincible=35;p.life=0;
+        if(player.hp<=0){player.hp=0;gameState='dead';createDeathButtons()}
+      }
+    }else if(p.type==='ally'){
+      p.x+=p.vx;p.y+=p.vy;p.life--;
+      if(boss&&boss.hp>0&&Math.hypot(p.x-(boss.x+boss.w/2),p.y-(boss.y+boss.h*0.5))<40){
+        boss.hp-=p.dmg||15;p.life=0;
+        for(let k=0;k<8;k++)particles.push({x:p.x,y:p.y,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,size:3,life:18,color:'#60e0ff'});
+        if(boss.hp<=0){boss.hp=0;onBossDefeated()}
+      }
+    }
+    if(p.life<=0)bossProjectiles.splice(i,1);
+  }
+  for(let i=groundMarks.length-1;i>=0;i--){
+    const m=groundMarks[i];m.life--;if(m.flash>0)m.flash--;
+    if(player.invincible<=0&&Math.hypot(player.x+player.size/2-m.x,player.y+player.size/2-m.y)<m.r+player.size/2){
+      player.hp-=m.dmg;player.invincible=40;
+      if(player.hp<=0){player.hp=0;gameState='dead';createDeathButtons()}
+    }
+    if(m.life<=0)groundMarks.splice(i,1);
+  }
+}
+
+function updateRescue(){
+  rescueTimer++;
+  if(rescueStep===0){
+    let anyTouch=false;
+    rescueMonsters.forEach(m=>{if(!m.alive||m.dying)return;m.anim+=0.035;if(!hitboxTouch(m))m.y+=m.speed;else anyTouch=true});
+    if(anyTouch||rescueMonsters[0].y+rescueMonsters[0].size>=player.y){showFriends=true;rescueStep=1;rescueTimer=0}
+  }else if(rescueStep===1){
+    let allArrived=true;
+    friendActors.forEach(f=>{if(f.y>f.ty){f.y-=1.8;allArrived=false}else f.y=f.ty});
+    if(allArrived&&rescueTimer>25){
+      friendActors.forEach((f,i)=>{
+        const target=rescueMonsters[i]||rescueMonsters[0];
+        const dx=(target.x+target.size/2)-f.x,dy=(target.y+target.size/2)-(f.y+10),dist=Math.sqrt(dx*dx+dy*dy)||1;
+        friendShots.push({x:f.x,y:f.y+10,vx:dx/dist*3.8,vy:dy/dist*3.8,life:100,size:11,hue:i===1?120:280});
+      });
+      rescueStep=2;rescueTimer=0;
+    }
+  }else if(rescueStep===2){
+    friendShots.forEach(s=>{s.x+=s.vx;s.y+=s.vy;s.life--});
+    if(rescueTimer===35){rescueMonsters.forEach(m=>{m.dying=true;spawnDisintegrate(m.x+m.size/2,m.y+m.size/2)});friendShots=[]}
+    if(rescueTimer>35)rescueMonsters.forEach(m=>{if(m.dying){m.alpha-=0.012;if(rescueTimer%8===0)spawnDisintegrate(m.x+m.size/2,m.y+m.size/2);if(m.alpha<=0){m.alive=false;m.alpha=0}}});
+    if(rescueTimer>120){rescueStep=3;rescueTimer=0;dialogFade=0}
+  }else if(rescueStep===3){dialogFade=Math.min(1,dialogFade+0.025);if(dialogFade>=1&&rescueTimer>20)rescueStep=4}
+  else if(rescueStep===5){for(let i=healParticles.length-1;i>=0;i--){const p=healParticles[i];p.x+=p.vx;p.y+=p.vy;p.life--;p.size*=0.985;if(p.life<=0)healParticles.splice(i,1)}}
+  for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vx*=0.97;p.vy*=0.97;p.life--;p.size*=0.98;if(p.life<=0||p.size<0.4)particles.splice(i,1)}
+}
+
+function drawFriendSprite(actor){
+  const img=friendSprites[actor.key];
+  if(img){const scale=actor.size/img.height;const dw=img.width*scale;ctx.drawImage(img,actor.x-dw/2,actor.y,dw,actor.size)}
+  else{ctx.fillStyle='#888';ctx.fillRect(actor.x-20,actor.y,40,actor.size)}
+  const nome=actor.key.charAt(0).toUpperCase()+actor.key.slice(1);
+  ctx.font='bold 11px Georgia,serif';ctx.textAlign='center';
+  ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillText(nome,actor.x+1,actor.y-4);
+  ctx.fillStyle='#e8d5a3';ctx.fillText(nome,actor.x,actor.y-5);
+}
+function drawHerosLying(){
+  const hs=44;
+  if(sprites['parado_baixo_spritesheet']){ctx.save();ctx.translate(player.x+hs/2,player.y+hs/2);ctx.rotate(Math.PI/2);ctx.drawImage(sprites['parado_baixo_spritesheet'],0,0,64,64,-hs/2,-hs/2,hs,hs);ctx.restore()}
+  else{ctx.fillStyle='#2060ff';ctx.fillRect(player.x,player.y,hs,hs)}
+  ctx.font='bold 12px "Palatino Linotype",Georgia,serif';ctx.textAlign='center';ctx.fillStyle='#e8d5a3';ctx.fillText('Heros',player.x+hs/2,player.y-8);
+}
+
+function drawRescueScene(){
+  const w=canvas.width,h=canvas.height,theme=getTheme();
+  if(rescueStep>=4){
+    drawEchoDialogBg();
+    if(rescueStep===4)drawDialogBox('Valeria','Heros! Heros! Aguenta, por favor! Lucian, cura ele rápido!','valeria');
+    else if(rescueStep===5){
+      drawDialogBox('Lucian','Aguente, Heros... você vai ficar bem.','lucian');
+      const g=ctx.createRadialGradient(w/2,h*0.4,5,w/2,h*0.4,100);
+      g.addColorStop(0,'rgba(120,255,170,0.25)');g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(w/2,h*0.4,100,0,Math.PI*2);ctx.fill();
+    }else if(rescueStep>=6){const idx=rescueStep-6;if(idx<rescueDialogs.length){const d=rescueDialogs[idx];drawDialogBox(d.speaker,d.text,d.portrait)}}
+    return;
+  }
+  drawFloorBackground(theme);
+  rescueMonsters.forEach(m=>{
+    if(!m.alive&&m.alpha<=0)return;
+    ctx.globalAlpha=Math.max(0,m.alpha);
+    drawBigMonster({x:m.x,y:m.y,size:m.size,anim:m.anim});
+    ctx.globalAlpha=1;
+  });
+  friendShots.forEach(s=>{
+    const g=ctx.createRadialGradient(s.x,s.y,1,s.x,s.y,s.size);
+    g.addColorStop(0,'#fff');g.addColorStop(0.4,`hsl(${s.hue},90%,70%)`);g.addColorStop(1,`hsla(${s.hue},90%,50%,0)`);
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(s.x,s.y,s.size,0,Math.PI*2);ctx.fill();
+  });
+  particles.forEach(p=>{ctx.globalAlpha=Math.min(1,p.life/30);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1});
+  drawHerosLying();
+  if(showFriends)friendActors.forEach(drawFriendSprite);
+  ctx.fillStyle='#222';ctx.fillRect(20,20,180,18);
+  ctx.fillStyle='#ff3333';ctx.fillRect(20,20,(2/Math.max(player.maxHp,2))*180,18);
+  ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.strokeRect(20,20,180,18);
+  ctx.fillStyle='#fff';ctx.font='14px Arial';ctx.textAlign='left';ctx.fillText(`HP: 2/${player.maxHp}`,28,34);
+  ctx.fillStyle='#ffcc00';ctx.font='16px Arial';ctx.fillText(getTheme().name,20,58);
+  if(rescueStep===3){ctx.fillStyle=`rgba(0,0,0,${dialogFade*0.85})`;ctx.fillRect(0,0,w,h)}
+}
+
+function update(){
+  if(gameState==='title'){
+    titleTimer++;
+    if(titleTimer>90){titleAlpha-=0.012;if(titleAlpha<=0){titleAlpha=0;hasSave=checkSaveExists();gameState='menu';setupMenuButtons()}}
+    return;
+  }
+  if(gameState==='floor_clear'){clearTimer--;if(clearTimer<=0)afterClearSequence();return}
+  if(gameState==='rescue'){updateRescue();return}
+  if(['post10','post50','post60','post80','post93','post96','pre_rescue','tempestas_dialog','menu'].includes(gameState))return;
+  if(gameState!=='playing'||isPaused)return;
+
+  updateFlameParticles();
+  if(boss){updateBoss();updateBossProjectiles()}
+
+  for(let i=healParticles.length-1;i>=0;i--){const p=healParticles[i];p.x+=p.vx;p.y+=p.vy;p.life--;p.size*=0.985;if(p.life<=0)healParticles.splice(i,1)}
+
+  if(spawnQueue>0){const alive=enemies.filter(e=>e.alive).length;if(alive<maxConcurrent){spawnTimer++;if(spawnTimer>40){spawnTimer=0;spawnOneEnemy();spawnQueue--}}}
+  let dx=0,dy=0;
+  if(keys['KeyW']||keys['ArrowUp'])dy-=1;if(keys['KeyS']||keys['ArrowDown'])dy+=1;
+  if(keys['KeyA']||keys['ArrowLeft'])dx-=1;if(keys['KeyD']||keys['ArrowRight'])dx+=1;
+  if(joyActive){dx=joyDX;dy=joyDY}
+  const moving=dx!==0||dy!==0;
+  if(moving&&player.state!=='ataque'){
+    const len=Math.sqrt(dx*dx+dy*dy);if(len>0){dx/=len;dy/=len}
+    player.x+=dx*player.speed;player.y+=dy*player.speed;player.angle=Math.atan2(dy,dx);
+    if(Math.abs(dx)>Math.abs(dy))player.dir=dx>0?'direita':'esquerda';else player.dir=dy>0?'baixo':'cima';
+    player.state='andar';
+  }else if(player.state!=='ataque'){player.state='parado';player.frame=0}
+  const key=getAnimKey(),conf=animConfig[key];
+  if(conf&&player.state!=='parado'){player.frameTimer++;if(player.frameTimer>=conf.speed){player.frameTimer=0;player.frame++;if(player.frame>=conf.frames){player.frame=0;if(player.state==='ataque')player.state=moving?'andar':'parado'}}}
+  else if(player.state==='parado')player.frame=0;
+  player.x=Math.max(0,Math.min(canvas.width-player.size,player.x));
+  const maxY=getTheme().allies?Math.min(barrierY-player.size-4,canvas.height-player.size-100):canvas.height-player.size;
+  player.y=Math.max(0,Math.min(maxY,player.y));
+  if(mouse.left)swordAttack();else if(mouse.right)createFireball();
+  if(player.attackCooldown>0)player.attackCooldown--;if(player.fireCooldown>0)player.fireCooldown--;
+  if(player.slashTimer>0)player.slashTimer--;if(player.invincible>0)player.invincible--;
+
+  enemies.forEach(enemy=>{
+    if(!enemy.alive)return;
+    enemy.anim+=0.06;
+    const ang=Math.atan2(player.y+player.size/2-(enemy.y+enemy.size/2),player.x+player.size/2-(enemy.x+enemy.size/2));
+    enemy.x+=Math.cos(ang)*enemy.speed;enemy.y+=Math.sin(ang)*enemy.speed;
+    if(enemy.canShoot){enemy.shootCd--;if(enemy.shootCd<=0){enemy.shootCd=120;const a=Math.atan2(player.y+player.size/2-(enemy.y+enemy.size/2),player.x+player.size/2-(enemy.x+enemy.size/2));enemyShots.push({x:enemy.x+enemy.size/2,y:enemy.y+enemy.size/2,vx:Math.cos(a)*2.0,vy:Math.sin(a)*2.0,life:220,size:10})}}
+    if(player.invincible<=0&&player.x<enemy.x+enemy.size&&player.x+player.size>enemy.x&&player.y<enemy.y+enemy.size&&player.y+player.size>enemy.y){
+      player.hp-=enemy.damage;player.invincible=50;
+      if(player.hp<=0){player.hp=0;gameState='dead';createDeathButtons()}
+    }
+  });
+  for(let i=enemyShots.length-1;i>=0;i--){
+    const s=enemyShots[i];s.x+=s.vx;s.y+=s.vy;s.life--;
+    if(player.invincible<=0&&Math.hypot(s.x-(player.x+player.size/2),s.y-(player.y+player.size/2))<player.size/2+s.size){player.hp-=15;player.invincible=40;s.life=0;if(player.hp<=0){player.hp=0;gameState='dead';createDeathButtons()}}
+    if(s.life<=0||s.x<-50||s.x>canvas.width+50||s.y<-50||s.y>canvas.height+50)enemyShots.splice(i,1);
+  }
+  for(let i=fireballs.length-1;i>=0;i--){
+    const f=fireballs[i];f.x+=f.vx;f.y+=f.vy;f.life--;
+    enemies.forEach(e=>{if(!e.alive)return;if(Math.hypot(e.x+e.size/2-f.x,e.y+e.size/2-f.y)<e.size/2+f.size/2){damageEnemy(e,f.dmg);f.life=0}});
+    if(boss&&boss.hp>0&&Math.hypot(f.x-(boss.x+boss.w/2),f.y-(boss.y+boss.h*0.5))<boss.w*0.4){
+      boss.hp-=f.dmg;f.life=0;
+      for(let k=0;k<5;k++)particles.push({x:f.x,y:f.y,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,size:3,life:15,color:'#c080ff'});
+      if(boss.hp<=0){boss.hp=0;onBossDefeated()}
+    }
+    if(f.life<=0||f.x<-80||f.x>canvas.width+80||f.y<-80||f.y>canvas.height+80)fireballs.splice(i,1);
+  }
+  for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vx*=0.95;p.vy*=0.95;p.life--;p.size*=0.96;if(p.life<=0||p.size<0.5)particles.splice(i,1)}
+  if(saveMsgTimer>0)saveMsgTimer--;
+}
+
+function drawBossProjectiles(){
+  bossProjectiles.forEach(p=>{
+    if(p.type==='homing'){
+      if(p.trail){
+        p.trail.forEach(t=>{
+          const a=t.life/20;
+          ctx.globalAlpha=a*0.6;
+          const g=ctx.createRadialGradient(t.x,t.y,1,t.x,t.y,p.size*0.8);
+          g.addColorStop(0,`rgba(200,140,255,${a})`);g.addColorStop(1,'rgba(100,40,180,0)');
+          ctx.fillStyle=g;ctx.beginPath();ctx.arc(t.x,t.y,p.size*0.7,0,Math.PI*2);ctx.fill();
         });
+        ctx.globalAlpha=1;
+      }
+      const g=ctx.createRadialGradient(p.x,p.y,2,p.x,p.y,p.size*2.2);
+      g.addColorStop(0,'#ffffff');g.addColorStop(0.25,'#e0b0ff');g.addColorStop(0.55,'#a040ff');g.addColorStop(1,'rgba(60,0,120,0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,p.size*2.2,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='rgba(230,180,255,0.9)';ctx.lineWidth=2;
+      for(let i=0;i<6;i++){
+        const a=(Math.PI*2/6)*i+Date.now()*0.004;
+        ctx.beginPath();ctx.moveTo(p.x+Math.cos(a)*4,p.y+Math.sin(a)*4);ctx.lineTo(p.x+Math.cos(a)*p.size*1.4,p.y+Math.sin(a)*p.size*1.4);ctx.stroke();
+      }
+    }else if(p.type==='orb'){
+      const g=ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,p.size*1.6);
+      g.addColorStop(0,'#e8d0ff');g.addColorStop(0.4,'#a040ff');g.addColorStop(1,'rgba(80,0,160,0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,p.size*1.6,0,Math.PI*2);ctx.fill();
+    }else if(p.type==='bolt'){
+      ctx.strokeStyle='rgba(160,80,255,0.35)';ctx.lineWidth=8;
+      ctx.beginPath();ctx.moveTo(p.x,p.y-28);ctx.lineTo(p.x+(Math.random()-0.5)*6,p.y);ctx.lineTo(p.x,p.y+22);ctx.stroke();
+      ctx.strokeStyle='rgba(200,140,255,0.9)';ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(p.x,p.y-28);ctx.lineTo(p.x+3,p.y-10);ctx.lineTo(p.x-2,p.y+5);ctx.lineTo(p.x,p.y+22);ctx.stroke();
+      ctx.strokeStyle='rgba(240,220,255,0.95)';ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.moveTo(p.x,p.y-28);ctx.lineTo(p.x,p.y+22);ctx.stroke();
+    }else if(p.type==='ally'){
+      const g=ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,p.size);
+      g.addColorStop(0,'#fff');g.addColorStop(0.5,'#60e0ff');g.addColorStop(1,'rgba(0,150,200,0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();
+    }
+  });
+  groundMarks.forEach(m=>{
+    const alpha=Math.min(1,m.life/120)*(m.flash>0?1:0.6);
+    ctx.globalAlpha=alpha;
+    const g=ctx.createRadialGradient(m.x,m.y,2,m.x,m.y,m.r);
+    g.addColorStop(0,'rgba(200,100,255,0.55)');g.addColorStop(0.4,'rgba(140,50,220,0.35)');g.addColorStop(0.75,'rgba(80,20,140,0.18)');g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(m.x,m.y,m.r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(180,100,255,0.7)';ctx.lineWidth=1.5;
+    for(let i=0;i<5;i++){const a=m.crack+i*(Math.PI*2/5);ctx.beginPath();ctx.moveTo(m.x+Math.cos(a)*4,m.y+Math.sin(a)*4);ctx.lineTo(m.x+Math.cos(a)*m.r*0.85,m.y+Math.sin(a)*m.r*0.85);ctx.stroke()}
+    ctx.strokeStyle='rgba(220,160,255,0.5)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(m.x,m.y,m.r*0.55,0,Math.PI*2);ctx.stroke();
+    ctx.globalAlpha=1;
+  });
+}
 
-        async function carregarImagens() {
-            const listaSprites = [
-                'andar_baixo_spritesheet','andar_cima_spritesheet',
-                'andar_esquerda_spritesheet','andar_direita_spritesheet',
-                'parado_baixo_spritesheet','parado_cima_spritesheet',
-                'parado_esquerda_spritesheet','parado_direita_spritesheet',
-                'ataque_horizontal_baixo_spritesheet','ataque_horizontal_cima_spritesheet',
-                'ataque_horizontal_esquerda_spritesheet','ataque_horizontal_direita_spritesheet'
-            ];
-            for (const nome of listaSprites) {
-                sprites[nome] = await loadImage(SPRITE_PATH + nome + '.png');
-            }
-            portraits['heros'] = await loadImage(SPRITE_PATH + 'heros.png');
-            portraits['mago-anciao'] = await loadImage(SPRITE_PATH + 'mago-anciao.png');
-            portraits['liora'] = await loadImage(SPRITE_PATH + 'liora.png');
-            portraits['valeria'] = await loadImage(SPRITE_PATH + 'valeria.png');
-            portraits['lucian'] = await loadImage(SPRITE_PATH + 'lucian.png');
+function drawMenu(){
+  const w=canvas.width,h=canvas.height;
+  // fundo
+  ctx.fillStyle='#0a0806';ctx.fillRect(0,0,w,h);
+  // moldura decorativa
+  ctx.strokeStyle='#c9a227';ctx.lineWidth=3;
+  ctx.strokeRect(20,20,w-40,h-40);
+  ctx.strokeStyle='rgba(201,162,39,0.3)';ctx.lineWidth=1;
+  ctx.strokeRect(28,28,w-56,h-56);
+  // título
+  ctx.fillStyle='#e8d5a3';ctx.font='bold 42px Georgia,serif';ctx.textAlign='center';
+  ctx.fillText('THE NEW LEGEND',w/2,h*0.28);
+  ctx.fillStyle='rgba(201,162,39,0.7)';ctx.font='16px Georgia,serif';
+  ctx.fillText('A torre aguarda...',w/2,h*0.28+36);
+  // botões
+  menuButtons.forEach(btn=>{
+    const disabled=btn.disabled;
+    ctx.fillStyle=disabled?'#1a1510':'#1a1a12';
+    ctx.fillRect(btn.x,btn.y,btn.w,btn.h);
+    ctx.strokeStyle=disabled?'#555':'#c9a227';ctx.lineWidth=2.5;
+    ctx.strokeRect(btn.x,btn.y,btn.w,btn.h);
+    ctx.fillStyle=disabled?'#666':'#fff';
+    ctx.font='bold 20px Georgia,serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(btn.text,btn.x+btn.w/2,btn.y+btn.h/2);
+  });
+  if(saveMsgTimer>0){
+    ctx.fillStyle='rgba(255,100,80,0.9)';ctx.font='14px Arial';ctx.textAlign='center';
+    ctx.fillText('Nenhum jogo salvo encontrado',w/2,h*0.75);
+  }
+}
+
+function drawPauseOverlay(){
+  const w=canvas.width,h=canvas.height;
+  ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='#e8d5a3';ctx.font='bold 36px Georgia,serif';ctx.textAlign='center';
+  ctx.fillText('PAUSADO',w/2,h/2-90);
+  pauseButtons.forEach(btn=>{
+    ctx.fillStyle='#1a1a12';ctx.fillRect(btn.x,btn.y,btn.w,btn.h);
+    ctx.strokeStyle='#c9a227';ctx.lineWidth=2.5;ctx.strokeRect(btn.x,btn.y,btn.w,btn.h);
+    ctx.fillStyle='#fff';ctx.font='bold 18px Georgia,serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(btn.text,btn.x+btn.w/2,btn.y+btn.h/2);
+  });
+  if(saveMsgTimer>0){
+    ctx.fillStyle='#7dff9a';ctx.font='bold 16px Arial';ctx.textAlign='center';
+    ctx.fillText('Jogo salvo!',w/2,h/2+160);
+  }
+}
+
+function draw(){
+  const w=canvas.width,h=canvas.height;
+  if(gameState==='title'){
+    ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);
+    ctx.globalAlpha=titleAlpha;
+    ctx.fillStyle='#e8d5a3';ctx.font='bold 48px Georgia,serif';ctx.textAlign='center';
+    ctx.fillText('THE NEW LEGEND',w/2,h/2);
+    ctx.globalAlpha=1;return;
+  }
+  if(gameState==='menu'){drawMenu();return}
+  if(gameState==='floor_clear'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.fillStyle='#e8d5a3';ctx.font='bold 32px Georgia,serif';ctx.textAlign='center';ctx.fillText('Andar limpo',w/2,h/2-20);ctx.font='20px Georgia,serif';ctx.fillStyle='#fff';ctx.fillText('Você descansa um pouco e avança.',w/2,h/2+25);return}
+  if(gameState==='pre_rescue'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);drawDialogBox('','Você lutou bravamente, mas a exaustão e seus ferimentos foram mais fortes. Você observa os monstros vindo em sua direção com o olhar turvo e sem conseguir se mexer.',null);return}
+  if(gameState==='tempestas_dialog'){
+    drawEchoDialogBg();
+    const d=tempestasDialogs[tempestasDialogIndex];
+    if(d.portrait==='tempestas'&&tempestasSp){
+      const maxH=Math.min(h*0.28,140);
+      drawTempestasSprite((w-tempestasSp.width*(maxH/tempestasSp.height))/2,h*0.02,maxH);
+    }
+    drawDialogBox(d.speaker,d.text,d.portrait);
+    return;
+  }
+  if(gameState==='post10'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);if(post10Step===0)drawDialogBox('Heros','Os monstros ficam mais fortes a cada andar. Já estou há algumas horas aqui dentro. Vou descansar mais um pouco e avançar.','heros');else if(post10Step===1){ctx.fillStyle='#e8d5a3';ctx.font='bold 28px Georgia,serif';ctx.textAlign='center';ctx.fillText('A cada andar você fica mais forte e habilidoso.',w/2,h/2)}else{ctx.fillStyle='#e8d5a3';ctx.font='bold 32px Georgia,serif';ctx.textAlign='center';ctx.fillText('Andar limpo',w/2,h/2-20);ctx.font='20px Georgia,serif';ctx.fillStyle='#fff';ctx.fillText('Você descansa um pouco e avança.',w/2,h/2+25)}return}
+  if(gameState==='post50'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);drawDialogBox('Heros','Já estou quase dois dias aqui. Está ficando muito difícil. Tenho que descansar mais tempo antes de subir um andar. Já sofri alguns ferimentos. Por sorte, quando limpo um andar ele fica vazio, então consigo dormir, comer e descansar. Nos últimos andares eu tive que usar mais estratégia. Sei que vai piorar. Vou descansar mais, fazer uns curativos e avançar. Não posso parar. E não vou.','heros');return}
+  if(gameState==='post60'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);drawDialogBox('Heros','Consigo sentir que estou mais forte. Vou avançar.','heros');return}
+  if(gameState==='post80'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);drawDialogBox('Heros','Já perdi as contas dos andares, mas sei que estou perto. Já quase quatro dias aqui. Dormir já não está sendo mais suficiente. Já estou ficando exausto. Os monstros são muito fortes. Não irei me render para esses vermes malditos. Vou ter que começar a descansar por mais tempo.','heros');return}
+  if(gameState==='post93'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);drawDialogBox('Heros','Já não estou mais aguentando. Meus remédios e poções já estão acabando, minha comida também. Já estou exausto. Estou uns 6 dias aqui, eu acho. Tive que começar a descansar mais. Os monstros estão em um nível absurdo. Tenho que me livrar deles ou a humanidade já era. Pelo meu lar, pelos meus amigos queridos, darei um fim a esses vermes.','heros');return}
+  if(gameState==='post96'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);if(post96Step===0)drawDialogBox('Heros','Droga... já estou sem forças e muito ferido. Esse último andar exigiu demais. Tenho que continuar... vou descansar um pouco...','heros');else drawDialogBox('','Heros desmaia antes de terminar a frase. Ferido e exausto, ele já tinha dado tudo de si há muito tempo. Normalmente seria impossível uma pessoa sozinha chegar até esse andar. Heros acorda exausto, sentindo o selo da torre já se romper, junta forças e parte ao próximo andar.',null);return}
+  if(gameState==='rescue'){drawRescueScene();return}
+  if(gameState==='floor_transition'){
+    ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.fillStyle='#e8d5a3';ctx.font='bold 36px Georgia,serif';ctx.textAlign='center';ctx.fillText(transitionName,w/2,h/2-30);
+    if(transitionBtn){ctx.fillStyle='#1a1a1a';ctx.fillRect(transitionBtn.x,transitionBtn.y,transitionBtn.w,transitionBtn.h);ctx.strokeStyle='#c9a227';ctx.lineWidth=3;ctx.strokeRect(transitionBtn.x,transitionBtn.y,transitionBtn.w,transitionBtn.h);ctx.fillStyle='#fff';ctx.font='20px Georgia,serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(transitionBtn.text,transitionBtn.x+transitionBtn.w/2,transitionBtn.y+transitionBtn.h/2)}
+    return;
+  }
+  if(gameState==='victory'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.fillStyle='#ffd700';ctx.font='bold 32px Georgia,serif';ctx.textAlign='center';ctx.fillText('Juntos até o fim',w/2,h/2-40);ctx.fillStyle='#fff';ctx.font='18px Georgia,serif';ctx.fillText('Heros e seus amigos seguem adiante.',w/2,h/2+10);ctx.fillText('Toque para voltar ao menu',w/2,h/2+50);return}
+  if(['present_heros','story','meeting','friends','tower'].includes(gameState)){
+    const d=dialogs[dialogIndex];
+    if(gameState==='meeting'||gameState==='friends')drawCastleRoom();else{ctx.fillStyle='#000';ctx.fillRect(0,0,w,h)}
+    drawDialogBox(d.speaker,d.text,d.portrait);return;
+  }
+  if(gameState==='playing'||gameState==='dead'){
+    const theme=getTheme();
+    drawFloorBackground(theme);
+    if(theme.detail==='flames')drawFlameParticles();
+
+    // Ignis no topo do andar 99
+    if(theme.showIgnis&&ignisSp){
+      const maxH=Math.min(canvas.height*0.22,120);
+      const scale=maxH/ignisSp.height;
+      const dw=ignisSp.width*scale;
+      drawIgnisSprite((w-dw)/2,18,maxH);
+    }
+
+    if(boss&&boss.hp>0){
+      drawTempestasSprite(boss.x,boss.y,boss.h);
+      const barW=180,barX=(w-barW)/2,barY=boss.y+boss.h+8;
+      ctx.fillStyle='#222';ctx.fillRect(barX,barY,barW,12);
+      ctx.fillStyle='#a040ff';ctx.fillRect(barX,barY,barW*(boss.hp/boss.maxHp),12);
+      ctx.strokeStyle='#e0c0ff';ctx.lineWidth=1;ctx.strokeRect(barX,barY,barW,12);
+      ctx.fillStyle='#c9a0ff';ctx.font='bold 12px Georgia,serif';ctx.textAlign='center';
+      ctx.fillText('Tempestas',w/2,barY+24);
+      ctx.fillStyle='#fff';ctx.font='11px Arial';ctx.fillText(`${Math.ceil(boss.hp)}/${boss.maxHp}`,w/2,barY+9);
+    }
+
+    drawBossProjectiles();
+
+    if(gameState==='playing'){
+      enemies.forEach(e=>{
+        if(!e.alive)return;
+        if(e.kind==='big'||e.kind==='mega'){if(e.kind==='mega')drawMegaMonster(e);else drawBigMonster(e)}
+        else{
+          const s=e.size*(1+Math.sin(e.anim)*0.05),ox=(e.size-s)/2;
+          ctx.fillStyle=theme.enemy;ctx.fillRect(e.x+ox,e.y+ox,s,s);
+          ctx.strokeStyle='#555';ctx.lineWidth=2;ctx.strokeRect(e.x+ox,e.y+ox,s,s);
+          if(e.canShoot){ctx.strokeStyle='#a0f';ctx.lineWidth=2;ctx.strokeRect(e.x+ox-2,e.y+ox-2,s+4,s+4)}
         }
+        if(e.hp<e.maxHp){ctx.fillStyle='#333';ctx.fillRect(e.x,e.y-10,e.size,6);ctx.fillStyle='#e33';ctx.fillRect(e.x,e.y-10,e.size*(e.hp/e.maxHp),6)}
+      });
+      enemyShots.forEach(s=>{ctx.beginPath();ctx.arc(s.x,s.y,s.size,0,Math.PI*2);ctx.fillStyle='#a0f';ctx.fill();ctx.beginPath();ctx.arc(s.x,s.y,s.size*0.5,0,Math.PI*2);ctx.fillStyle='#faf';ctx.fill()});
+      particles.forEach(p=>{ctx.globalAlpha=Math.min(1,p.life/28);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1});
+      healParticles.forEach(p=>{ctx.globalAlpha=Math.min(1,p.life/40);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1});
+      fireballs.forEach(f=>{ctx.beginPath();ctx.arc(f.x,f.y,f.size,0,Math.PI*2);ctx.fillStyle='#ff4400';ctx.fill();ctx.beginPath();ctx.arc(f.x,f.y,f.size*0.55,0,Math.PI*2);ctx.fillStyle='#ffcc00';ctx.fill()});
+      if(player.invincible<=0||Math.floor(player.invincible/3)%2===0)drawPlayer();
+      drawPartyAllies();
+      if(player.slashTimer>0){
+        const t=player.slashTimer/16,cx=player.x+player.size/2,cy=player.y+player.size/2,arcR=swordRange*0.95;
+        ctx.beginPath();ctx.arc(cx,cy,arcR,player.angle-1.2,player.angle+1.2);ctx.strokeStyle=`rgba(150,220,255,${t*0.25})`;ctx.lineWidth=16;ctx.lineCap='round';ctx.stroke();
+        ctx.beginPath();ctx.arc(cx,cy,arcR*0.88,player.angle-1.0,player.angle+1.0);ctx.strokeStyle=`rgba(230,250,255,${t*0.85})`;ctx.lineWidth=3;ctx.stroke();
+      }
+      ctx.fillStyle='#222';ctx.fillRect(20,20,180,18);
+      ctx.fillStyle=player.hp>4?'#22cc44':'#ff3333';ctx.fillRect(20,20,(player.hp/player.maxHp)*180,18);
+      ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.strokeRect(20,20,180,18);
+      ctx.fillStyle='#fff';ctx.font='14px Arial';ctx.textAlign='left';ctx.fillText(`HP: ${player.hp}/${player.maxHp}`,28,34);
+      ctx.fillStyle='#ffcc00';ctx.font='16px Arial';ctx.fillText(getTheme().name,20,58);
+      if(killsNeeded>0)ctx.fillText(`Kills: ${kills}/${killsNeeded}  |  Total: ${totalKills}`,20,80);
+      else ctx.fillText(`Total: ${totalKills}`,20,80);
+    }
+    if(isPaused&&gameState==='playing')drawPauseOverlay();
+    if(gameState==='dead'){
+      ctx.fillStyle='rgba(0,0,0,0.82)';ctx.fillRect(0,0,w,h);
+      ctx.fillStyle='#ff3333';ctx.font='bold 56px Arial';ctx.textAlign='center';ctx.fillText('VOCÊ MORREU',w/2,h/2-90);
+      ctx.fillStyle='#fff';ctx.font='22px Arial';
+      ctx.fillText(`Chegou no ${getTheme().name}`,w/2,h/2-35);
+      ctx.fillText(`Total de monstros: ${totalKills}`,w/2,h/2);
+      deathButtons.forEach(btn=>{
+        ctx.fillStyle='#1a1a1a';ctx.fillRect(btn.x,btn.y,btn.w,btn.h);
+        ctx.strokeStyle='#ff6600';ctx.lineWidth=3;ctx.strokeRect(btn.x,btn.y,btn.w,btn.h);
+        ctx.fillStyle='#fff';ctx.font='20px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillText(btn.text,btn.x+btn.w/2,btn.y+btn.h/2);
+      });
+    }
+  }
+}
 
-        const animConfig = {
-            andar_baixo:   { sheet:'andar_baixo_spritesheet', fw:64, fh:64, frames:8, speed:6 },
-            andar_cima:    { sheet:'andar_cima_spritesheet', fw:64, fh:64, frames:8, speed:6 },
-            andar_esquerda:{ sheet:'andar_esquerda_spritesheet', fw:64, fh:64, frames:8, speed:6 },
-            andar_direita: { sheet:'andar_direita_spritesheet', fw:64, fh:64, frames:8, speed:6 },
-            parado_baixo:  { sheet:'parado_baixo_spritesheet', fw:64, fh:64, frames:4, speed:18 },
-            parado_cima:   { sheet:'parado_cima_spritesheet', fw:64, fh:64, frames:4, speed:18 },
-            parado_esquerda:{ sheet:'parado_esquerda_spritesheet', fw:64, fh:64, frames:5, speed:18 },
-            parado_direita:{ sheet:'parado_direita_spritesheet', fw:64, fh:64, frames:5, speed:18 },
-            ataque_baixo:  { sheet:'ataque_horizontal_baixo_spritesheet', fw:64, fh:64, frames:5, speed:4 },
-            ataque_cima:   { sheet:'ataque_horizontal_cima_spritesheet', fw:64, fh:64, frames:5, speed:4 },
-            ataque_esquerda:{ sheet:'ataque_horizontal_esquerda_spritesheet', fw:96, fh:64, frames:6, speed:4 },
-            ataque_direita:{ sheet:'ataque_horizontal_direita_spritesheet', fw:96, fh:64, frames:6, speed:4 }
-        };
-
-        // 7 andares
-        const floors = [
-            { name: 'Andar 1 - Pedra Antiga', ground: '#3d3d3d', accent: '#555', enemy: '#111' },
-            { name: 'Andar 2 - Floresta Sombria', ground: '#1a331a', accent: '#2d5a2d', enemy: '#0a1a0a' },
-            { name: 'Andar 3 - Caverna de Cristal', ground: '#2a1a4e', accent: '#5a3a8a', enemy: '#0f0520' },
-            { name: 'Andar 4 - Inferno', ground: '#4a1515', accent: '#8a3030', enemy: '#1a0505' },
-            { name: 'Andar 5 - Gelo Eterno', ground: '#1a2a3a', accent: '#3a5a7a', enemy: '#051015' },
-            { name: 'Andar 6 - Ruínas Douradas', ground: '#3d2e10', accent: '#8a6a20', enemy: '#1a1205' },
-            { name: 'Andar 7 - Vazio', ground: '#121212', accent: '#333', enemy: '#000' }
-        ];
-
-        let gameState = 'title';
-        let isPaused = false;
-        let titleAlpha = 1;
-        let titleTimer = 0;
-        let dialogIndex = 0;
-
-        // Transição de andar
-        let pendingFloor = 0;
-        let transitionName = '';
-
-        const dialogs = [
-            { type:'present', speaker:'Heros', portrait:'heros',
-              text:'Este é você: Heros, um guerreiro forte e destemido. Seu vilarejo foi destruído por monstros poderosos que conseguiram romper o selo da torre. Você e seus amigos estavam explorando a floresta e, por um milagre, sobreviveram. Porém, perderam a família e o lar. Nenhum de vocês jamais superou esse trauma. E você prometeu vingança.' },
-            { type:'story', speaker:'', portrait:null,
-              text:'Em um mundo de magia existe uma torre, o lar dos monstros. Deles saíam criaturas que espalhavam caos pelo mundo, até que o herói do passado — considerado uma lenda — sacrificou a própria vida para selar a torre.' },
-            { type:'story', speaker:'', portrait:null,
-              text:'Mas o selo era temporário. Cem anos depois, ele começa a se romper. Os monstros voltarão a sair. E quando o rei deles surgir junto, a humanidade não terá chance.' },
-            { type:'story', speaker:'', portrait:null,
-              text:'A humanidade reuniu os guerreiros mais fortes para entrar na torre antes que o selo se quebrasse. Porém, alguns só se preocupavam consigo mesmos. Outros tinham medo. Ninguém se atreveu a ir.' },
-            { type:'story', speaker:'', portrait:null,
-              text:'Até que surgiu um guerreiro destemido. Aquele que declarou que entraria na torre sozinho, com coragem e uma fúria que queimava como o sol. Seu nome era Heros.' },
-            { type:'meeting', speaker:'Vozes', portrait:null,
-              text:'Você vai sozinho? Está louco? Deve ser piada!' },
-            { type:'meeting', speaker:'Mago Ancião', portrait:'mago-anciao',
-              text:'Heros, com o seu nível de poder, sendo um cavaleiro forte e habilidoso com magia, é provável que você limpe os primeiros andares com facilidade. Mas e os andares superiores? E o rei deles? Você não conseguirá sozinho.' },
-            { type:'meeting', speaker:'Heros', portrait:'heros',
-              text:'Eu darei um fim a esses monstros malditos que destruíram nosso lar. Vou entrar lá e fazer com que sofram. Darei minha vida por isso. Matarei o máximo que puder. Quando eu cair, juntem o maior exército possível e enfrentem apenas o rei deles. Isso ajuda, não é?' },
-            { type:'meeting', speaker:'Mago Ancião', portrait:'mago-anciao',
-              text:'De fato, seria possível vencer enfrentando somente o rei... com baixas e muito esforço. Mas, Heros, não será um caminho tranquilo. Seu ódio, por mais forte que seja, pode não ser o suficiente.' },
-            { type:'meeting', speaker:'Heros', portrait:'heros',
-              text:'Será o suficiente. Eles conhecerão o medo. Já está decidido. Estou pronto. Partirei agora, depois de me despedir dos meus companheiros. Juntem os mais habilidosos.' },
-            { type:'meeting', speaker:'Mago Ancião', portrait:'mago-anciao',
-              text:'Entendido. Não temos escolha. Eu lhe desejo sorte. Que as almas dos guerreiros e do herói da lenda estejam com você. Adeus, meu rapaz. Foi uma honra lutar ao seu lado.' },
-            { type:'meeting', speaker:'Heros', portrait:'heros',
-              text:'Digo o mesmo. Adeus, guerreiros.' },
-            { type:'friends', speaker:'', portrait:null,
-              text:'Heros encontra seus amigos: Liora e os irmãos Valeria e Lucian.' },
-            { type:'friends', speaker:'Valeria', portrait:'valeria',
-              text:'Isso é loucura, Heros. Por favor, reconsidere. Por nós. Não deixaremos que você parta.' },
-            { type:'friends', speaker:'Liora', portrait:'liora',
-              text:'Por favor, Heros...' },
-            { type:'friends', speaker:'Lucian', portrait:'lucian',
-              text:'Vamos lá, cara... assim não dá. Não vai ser um caminho tranquilo.' },
-            { type:'friends', speaker:'Heros', portrait:'heros',
-              text:'Já estou decidido. Não temos escolha. Vocês são as pessoas mais importantes do mundo para mim.' },
-            { type:'friends', speaker:'Valeria', portrait:'valeria',
-              text:'Então iremos com você.' },
-            { type:'friends', speaker:'Heros', portrait:'heros',
-              text:'Vocês não conseguem. O passado ainda nos assombra. Você tem medo, Valeria, mas não é culpa sua. Olhe para o seu irmão e para a Liora... eles não vão conseguir. Não é culpa de vocês. Vocês terão que enfrentar o rei. Recomponham-se, amigos. Tragam a paz à humanidade e não morram. Depois, vivam felizes.' },
-            { type:'friends', speaker:'Valeria', portrait:'valeria', text:'...' },
-            { type:'friends', speaker:'Liora', portrait:'liora', text:'...' },
-            { type:'friends', speaker:'Lucian', portrait:'lucian', text:'...' },
-            { type:'friends', speaker:'Heros', portrait:'heros',
-              text:'Não temos escolha. Adeus, amigos. Obrigado por tudo. Darei minha vida pelo nosso lar. Adeus.' },
-            { type:'friends', speaker:'', portrait:null,
-              text:'Heros parte, deixando seus amigos que choram ao ver sua partida, com culpa e dor. Eles se despedem de você.' },
-            { type:'tower', speaker:'', portrait:null,
-              text:'Heros chega à torre. A barreira repele monstros, mas não tem efeito em humanos. Ele entra sem problemas.' },
-            { type:'tower', speaker:'Heros', portrait:'heros',
-              text:'Respirando fundo, com fúria e determinação, Heros lembra da promessa de vingança que fez diante do seu vilarejo destruído. Com o foco renovado, ele avança.' }
-        ];
-
-        let currentFloor = 0, killsNeeded = 20, kills = 0, totalKills = 0;
-        let enemySpeed = 0.55, maxEnemies = 4;
-
-        const player = {
-            x:0, y:0, size:48, speed:3.8,
-            hp:10, maxHp:10, angle:Math.PI/2, dir:'baixo',
-            state:'parado', frame:0, frameTimer:0,
-            attackCooldown:0, fireCooldown:0, slashTimer:0, invincible:0
-        };
-
-        let enemies = [], fireballs = [], particles = [], deathButtons = [];
-        const ENEMY_SIZE = 28, RESPAWN_TIME = 220;
-        const keys = {};
-        let mouse = { left:false, right:false };
-        let joyActive = false, joyTouchId = null, joyDX = 0, joyDY = 0;
-        const joyKnob = document.getElementById('joystickKnob');
-        const joyZone = document.getElementById('joystickZone');
-
-        function getTheme() {
-            return floors[Math.min(currentFloor, floors.length - 1)];
-        }
-
-        function getAnimKey() {
-            if (player.state === 'ataque') return 'ataque_' + player.dir;
-            if (player.state === 'andar') return 'andar_' + player.dir;
-            return 'parado_' + player.dir;
-        }
-
-        function drawPlayer() {
-            const key = getAnimKey();
-            const conf = animConfig[key];
-            if (!conf) return;
-            const sheet = sprites[conf.sheet];
-            if (!sheet) {
-                ctx.fillStyle = '#2060ff';
-                ctx.fillRect(player.x, player.y, player.size, player.size);
-                return;
-            }
-            const frameToUse = (player.state === 'parado') ? 0 : Math.min(player.frame, conf.frames - 1);
-            const fw = conf.fw, fh = conf.fh;
-            const sx = frameToUse * fw;
-            const drawW = player.size * (fw / 64);
-            const ox = (drawW - player.size) / 2;
-            ctx.drawImage(sheet, sx, 0, fw, fh, player.x - ox, player.y, drawW, player.size);
-        }
-
-        function drawCastleRoom() {
-            const w = canvas.width, h = canvas.height;
-            ctx.fillStyle = '#2a2a2e';
-            ctx.fillRect(0, 0, w, h);
-            ctx.fillStyle = '#1c1c20';
-            ctx.fillRect(0, h * 0.62, w, h * 0.38);
-            ctx.fillStyle = '#4a1c1c';
-            const rugW = w * 0.55, rugH = h * 0.22;
-            ctx.fillRect((w - rugW) / 2, h * 0.68, rugW, rugH);
-            ctx.strokeStyle = '#8a6a2a';
-            ctx.lineWidth = 3;
-            ctx.strokeRect((w - rugW) / 2 + 4, h * 0.68 + 4, rugW - 8, rugH - 8);
-            ctx.fillStyle = '#3a3a42';
-            ctx.fillRect(w * 0.12, h * 0.08, 28, h * 0.54);
-            ctx.fillRect(w * 0.88 - 28, h * 0.08, 28, h * 0.54);
-        }
-
-        function drawDialogBox(speaker, text, portraitKey) {
-            const w = canvas.width, h = canvas.height;
-            if (portraitKey && portraits[portraitKey]) {
-                const img = portraits[portraitKey];
-                const maxH = Math.min(h * 0.48, 320);
-                const scale = maxH / img.height;
-                const pw = img.width * scale;
-                const ph = img.height * scale;
-                ctx.drawImage(img, (w - pw) / 2, h * 0.06, pw, ph);
-            }
-            const boxH = Math.min(150, h * 0.26);
-            const boxY = h - boxH - 16;
-            const boxX = 16;
-            const boxW = w - 32;
-            ctx.fillStyle = 'rgba(0,0,0,0.85)';
-            ctx.fillRect(boxX, boxY, boxW, boxH);
-            ctx.strokeStyle = '#c9a227';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(boxX, boxY, boxW, boxH);
-            if (speaker) {
-                ctx.fillStyle = '#ffd700';
-                ctx.font = 'bold 17px Georgia, serif';
-                ctx.textAlign = 'left';
-                ctx.fillText(speaker, boxX + 16, boxY + 26);
-            }
-            ctx.fillStyle = '#fff';
-            ctx.font = '15px Georgia, serif';
-            ctx.textAlign = 'left';
-            const maxWidth = boxW - 32;
-            const words = text.split(' ');
-            let line = '', ly = boxY + (speaker ? 50 : 34);
-            for (let i = 0; i < words.length; i++) {
-                const test = line + words[i] + ' ';
-                if (ctx.measureText(test).width > maxWidth && line !== '') {
-                    ctx.fillText(line, boxX + 16, ly);
-                    line = words[i] + ' ';
-                    ly += 20;
-                    if (ly > boxY + boxH - 20) break;
-                } else line = test;
-            }
-            ctx.fillText(line, boxX + 16, ly);
-            ctx.fillStyle = 'rgba(255,255,255,0.45)';
-            ctx.font = '12px Arial';
-            ctx.textAlign = 'right';
-            ctx.fillText('▼', boxX + boxW - 14, boxY + boxH - 10);
-        }
-
-        function advanceDialog() {
-            dialogIndex++;
-            if (dialogIndex >= dialogs.length) {
-                startGameplay();
-                return;
-            }
-            const d = dialogs[dialogIndex];
-            if (d.type === 'present') gameState = 'present_heros';
-            else if (d.type === 'story') gameState = 'story';
-            else if (d.type === 'meeting') gameState = 'meeting';
-            else if (d.type === 'friends') gameState = 'friends';
-            else if (d.type === 'tower') gameState = 'tower';
-        }
-
-        function startGameplay() {
-            gameState = 'playing';
-            isPaused = false;
-            currentFloor = 0;
-            killsNeeded = 20;
-            kills = 0;
-            totalKills = 0;
-            enemySpeed = 0.55;
-            maxEnemies = 4;
-            player.maxHp = 10;
-            player.hp = 10;
-            player.x = canvas.width / 2 - player.size / 2;
-            player.y = canvas.height / 2 - player.size / 2;
-            player.angle = Math.PI / 2;
-            player.dir = 'baixo';
-            player.state = 'parado';
-            player.frame = 0;
-            player.attackCooldown = 0;
-            player.fireCooldown = 0;
-            player.slashTimer = 0;
-            player.invincible = 0;
-            enemies = []; fireballs = []; particles = []; deathButtons = [];
-            for (let i = 0; i < maxEnemies; i++) spawnEnemy();
-        }
-
-        function spawnEnemy() {
-            const side = Math.floor(Math.random() * 4);
-            let x, y;
-            if (side === 0) { x = Math.random() * canvas.width; y = -ENEMY_SIZE - 10; }
-            else if (side === 1) { x = canvas.width + ENEMY_SIZE + 10; y = Math.random() * canvas.height; }
-            else if (side === 2) { x = Math.random() * canvas.width; y = canvas.height + ENEMY_SIZE + 10; }
-            else { x = -ENEMY_SIZE - 10; y = Math.random() * canvas.height; }
-            enemies.push({ x, y, size: ENEMY_SIZE, alive: true, respawnTimer: 0, anim: Math.random() * Math.PI * 2 });
-        }
-
-        function createFireball() {
-            if (player.fireCooldown > 0 || isPaused) return;
-            const speed = 9.5;
-            fireballs.push({
-                x: player.x + player.size / 2, y: player.y + player.size / 2,
-                vx: Math.cos(player.angle) * speed, vy: Math.sin(player.angle) * speed,
-                size: 13, life: 85
-            });
-            player.fireCooldown = 28;
-        }
-
-        function swordAttack() {
-            if (player.attackCooldown > 0 || player.state === 'ataque' || isPaused) return;
-            player.state = 'ataque';
-            player.frame = 0; player.frameTimer = 0;
-            player.attackCooldown = 22; player.slashTimer = 16;
-            const range = 70;
-            const ax = player.x + player.size / 2 + Math.cos(player.angle) * (range * 0.55);
-            const ay = player.y + player.size / 2 + Math.sin(player.angle) * (range * 0.55);
-            enemies.forEach(e => {
-                if (!e.alive) return;
-                const dx = e.x + e.size / 2 - ax, dy = e.y + e.size / 2 - ay;
-                if (Math.sqrt(dx * dx + dy * dy) < 58) killEnemy(e);
-            });
-        }
-
-        function killEnemy(enemy) {
-            enemy.alive = false;
-            enemy.respawnTimer = RESPAWN_TIME;
-            for (let i = 0; i < 8; i++) {
-                particles.push({
-                    x: enemy.x + enemy.size / 2, y: enemy.y + enemy.size / 2,
-                    vx: (Math.random() - 0.5) * 7, vy: (Math.random() - 0.5) * 7,
-                    size: 3 + Math.random() * 3, life: 22 + Math.random() * 12,
-                    color: `hsl(${Math.random() * 40 + 10},85%,55%)`
-                });
-            }
-            kills++;
-            totalKills++;
-            if (kills >= killsNeeded) {
-                requestNextFloor();
-            }
-        }
-
-        // ===== TRANSIÇÃO DE ANDAR =====
-        function requestNextFloor() {
-            // Se acabou de completar o andar 3 (índice 2), mostra fala do Heros antes
-            if (currentFloor === 2) {
-                gameState = 'floor_comment';
-                return;
-            }
-            goToTransition();
-        }
-
-        function goToTransition() {
-            pendingFloor = currentFloor + 1;
-            if (pendingFloor >= floors.length) {
-                // Zerou os 7 andares (por enquanto)
-                gameState = 'victory';
-                return;
-            }
-            transitionName = floors[pendingFloor].name;
-            gameState = 'floor_transition';
-        }
-
-        function applyNextFloor() {
-            currentFloor = pendingFloor;
-            kills = 0;
-
-            if (currentFloor < 3) {
-                killsNeeded *= 2;
-                enemySpeed *= 1.333;
-                maxEnemies = Math.floor(maxEnemies * 1.333);
-            } else if (currentFloor === 3) {
-                killsNeeded = Math.floor(killsNeeded * 1.5);
-                enemySpeed *= 1.2;
-                maxEnemies = Math.floor(maxEnemies * 1.15);
-            } else {
-                // 5, 6, 7: mesma dificuldade do 4, um pouco menos monstros
-                maxEnemies = Math.max(4, Math.floor(maxEnemies * 0.92));
-            }
-
-            player.maxHp = 10 + (currentFloor * 10);
-            player.hp = player.maxHp;
-
-            enemies = [];
-            fireballs = [];
-            particles = [];
-            for (let i = 0; i < maxEnemies; i++) spawnEnemy();
-
-            player.x = canvas.width / 2 - player.size / 2;
-            player.y = canvas.height / 2 - player.size / 2;
-            player.state = 'parado';
-            player.frame = 0;
-            player.attackCooldown = 0;
-            player.fireCooldown = 0;
-            player.slashTimer = 0;
-            player.invincible = 30;
-
-            gameState = 'playing';
-        }
-
-        function resetGame() { startGameplay(); }
-
-        function restartFloor() {
-            kills = 0;
-            isPaused = false;
-            player.hp = player.maxHp;
-            player.x = canvas.width / 2 - player.size / 2;
-            player.y = canvas.height / 2 - player.size / 2;
-            player.state = 'parado';
-            player.frame = 0;
-            player.attackCooldown = 0;
-            player.fireCooldown = 0;
-            player.slashTimer = 0;
-            player.invincible = 0;
-            enemies = []; fireballs = []; particles = []; deathButtons = [];
-            for (let i = 0; i < maxEnemies; i++) spawnEnemy();
-            gameState = 'playing';
-        }
-
-        function createDeathButtons() {
-            const cx = canvas.width / 2, cy = canvas.height / 2;
-            deathButtons = [
-                { text:'Reiniciar Andar', x:cx-130, y:cy+50, w:260, h:48, action:() => restartFloor() },
-                { text:'Reiniciar do Início', x:cx-130, y:cy+115, w:260, h:48, action:() => resetGame() }
-            ];
-        }
-
-        function togglePause() {
-            if (gameState !== 'playing') return;
-            isPaused = !isPaused;
-        }
-
-        function onAdvance() {
-            if (['present_heros','story','meeting','friends','tower'].includes(gameState)) {
-                advanceDialog();
-                return;
-            }
-            if (gameState === 'floor_comment') {
-                goToTransition();
-                return;
-            }
-            if (gameState === 'floor_transition') {
-                applyNextFloor();
-                return;
-            }
-            if (gameState === 'victory') {
-                resetGame();
-            }
-        }
-
-        // ===== INPUT =====
-        window.addEventListener('keydown', e => {
-            keys[e.code] = true;
-            if (e.code === 'Space') {
-                e.preventDefault();
-                if (gameState === 'playing') togglePause();
-                else onAdvance();
-            }
-            if (e.code === 'Enter' || e.code === 'KeyZ') onAdvance();
-        });
-        window.addEventListener('keyup', e => { keys[e.code] = false; });
-
-        canvas.addEventListener('mousedown', e => {
-            e.preventDefault();
-            if (gameState === 'dead') {
-                const rect = canvas.getBoundingClientRect();
-                const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-                deathButtons.forEach(btn => {
-                    if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) btn.action();
-                });
-                return;
-            }
-            if (['present_heros','story','meeting','friends','tower','floor_comment','floor_transition','victory'].includes(gameState)) {
-                onAdvance();
-                return;
-            }
-            if (gameState === 'playing' && !isPaused) {
-                if (e.button === 0) mouse.left = true;
-                if (e.button === 2) mouse.right = true;
-            }
-        });
-        canvas.addEventListener('mouseup', e => {
-            if (e.button === 0) mouse.left = false;
-            if (e.button === 2) mouse.right = false;
-        });
-        canvas.addEventListener('contextmenu', e => e.preventDefault());
-
-        joyZone.addEventListener('touchstart', e => {
-            e.preventDefault(); e.stopPropagation();
-            if (joyActive || isPaused || gameState !== 'playing') return;
-            const t = e.changedTouches[0];
-            joyActive = true; joyTouchId = t.identifier;
-            handleJoy(t);
-        }, { passive:false });
-        joyZone.addEventListener('touchmove', e => {
-            e.preventDefault(); e.stopPropagation();
-            if (!joyActive) return;
-            for (let t of e.changedTouches) if (t.identifier === joyTouchId) { handleJoy(t); break; }
-        }, { passive:false });
-        function endJoy(e) {
-            for (let t of e.changedTouches) {
-                if (t.identifier === joyTouchId) {
-                    joyActive = false; joyTouchId = null; joyDX = 0; joyDY = 0;
-                    joyKnob.style.top = '30px'; joyKnob.style.left = '30px';
-                    break;
-                }
-            }
-        }
-        joyZone.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); endJoy(e); }, { passive:false });
-        joyZone.addEventListener('touchcancel', e => { e.preventDefault(); endJoy(e); }, { passive:false });
-        function handleJoy(touch) {
-            const rect = joyZone.getBoundingClientRect();
-            const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-            let dx = touch.clientX - cx, dy = touch.clientY - cy;
-            const dist = Math.sqrt(dx*dx+dy*dy), maxD = 38;
-            if (dist > maxD) { dx = dx/dist*maxD; dy = dy/dist*maxD; }
-            joyKnob.style.left = (30+dx)+'px'; joyKnob.style.top = (30+dy)+'px';
-            joyDX = dx/maxD; joyDY = dy/maxD;
-        }
-
-        document.getElementById('fireBtn').addEventListener('touchstart', e => {
-            e.preventDefault(); e.stopPropagation();
-            if (gameState === 'playing' && !isPaused) createFireball();
-        }, { passive:false });
-        document.getElementById('pauseBtn').addEventListener('touchstart', e => {
-            e.preventDefault(); e.stopPropagation();
-            if (gameState === 'playing') togglePause();
-        }, { passive:false });
-
-        canvas.addEventListener('touchstart', e => {
-            e.preventDefault();
-            if (gameState === 'dead') {
-                const t = e.changedTouches[0];
-                const rect = canvas.getBoundingClientRect();
-                const mx = t.clientX - rect.left, my = t.clientY - rect.top;
-                deathButtons.forEach(btn => {
-                    if (mx >= btn.x && mx <= btn.x+btn.w && my >= btn.y && my <= btn.y+btn.h) btn.action();
-                });
-                return;
-            }
-            if (['present_heros','story','meeting','friends','tower','floor_comment','floor_transition','victory'].includes(gameState)) {
-                onAdvance();
-                return;
-            }
-            if (gameState !== 'playing' || isPaused) return;
-            const t = e.changedTouches[0];
-            const joyR = joyZone.getBoundingClientRect();
-            const fireR = document.getElementById('fireBtn').getBoundingClientRect();
-            const pauseR = document.getElementById('pauseBtn').getBoundingClientRect();
-            const onJoy = t.clientX>=joyR.left && t.clientX<=joyR.right && t.clientY>=joyR.top && t.clientY<=joyR.bottom;
-            const onFire = t.clientX>=fireR.left && t.clientX<=fireR.right && t.clientY>=fireR.top && t.clientY<=fireR.bottom;
-            const onPause = t.clientX>=pauseR.left && t.clientX<=pauseR.right && t.clientY>=pauseR.top && t.clientY<=pauseR.bottom;
-            if (!onJoy && !onFire && !onPause) swordAttack();
-        }, { passive:false });
-
-        // ===== UPDATE =====
-        function update() {
-            if (gameState === 'title') {
-                titleTimer++;
-                if (titleTimer > 90) {
-                    titleAlpha -= 0.012;
-                    if (titleAlpha <= 0) {
-                        titleAlpha = 0;
-                        gameState = 'present_heros';
-                        dialogIndex = 0;
-                    }
-                }
-                return;
-            }
-            if (gameState !== 'playing' || isPaused) return;
-
-            let dx = 0, dy = 0;
-            if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
-            if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
-            if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
-            if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
-            if (joyActive) { dx = joyDX; dy = joyDY; }
-            const moving = dx !== 0 || dy !== 0;
-
-            if (moving && player.state !== 'ataque') {
-                const len = Math.sqrt(dx*dx+dy*dy);
-                if (len > 0) { dx /= len; dy /= len; }
-                player.x += dx * player.speed;
-                player.y += dy * player.speed;
-                player.angle = Math.atan2(dy, dx);
-                if (Math.abs(dx) > Math.abs(dy)) player.dir = dx > 0 ? 'direita' : 'esquerda';
-                else player.dir = dy > 0 ? 'baixo' : 'cima';
-                player.state = 'andar';
-            } else if (player.state !== 'ataque') {
-                player.state = 'parado';
-                player.frame = 0;
-            }
-
-            const key = getAnimKey();
-            const conf = animConfig[key];
-            if (conf && player.state !== 'parado') {
-                player.frameTimer++;
-                if (player.frameTimer >= conf.speed) {
-                    player.frameTimer = 0;
-                    player.frame++;
-                    if (player.frame >= conf.frames) {
-                        player.frame = 0;
-                        if (player.state === 'ataque') player.state = moving ? 'andar' : 'parado';
-                    }
-                }
-            } else if (player.state === 'parado') player.frame = 0;
-
-            player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
-            player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
-
-            if (mouse.left) swordAttack();
-            else if (mouse.right) createFireball();
-
-            if (player.attackCooldown > 0) player.attackCooldown--;
-            if (player.fireCooldown > 0) player.fireCooldown--;
-            if (player.slashTimer > 0) player.slashTimer--;
-            if (player.invincible > 0) player.invincible--;
-
-            enemies.forEach(enemy => {
-                if (!enemy.alive) {
-                    enemy.respawnTimer--;
-                    if (enemy.respawnTimer <= 0) {
-                        const side = Math.floor(Math.random()*4);
-                        if (side===0){enemy.x=Math.random()*canvas.width;enemy.y=-ENEMY_SIZE-10;}
-                        else if(side===1){enemy.x=canvas.width+ENEMY_SIZE+10;enemy.y=Math.random()*canvas.height;}
-                        else if(side===2){enemy.x=Math.random()*canvas.width;enemy.y=canvas.height+ENEMY_SIZE+10;}
-                        else{enemy.x=-ENEMY_SIZE-10;enemy.y=Math.random()*canvas.height;}
-                        enemy.alive = true;
-                        enemy.anim = Math.random()*Math.PI*2;
-                    }
-                    return;
-                }
-                enemy.anim += 0.09;
-                const ang = Math.atan2(
-                    player.y+player.size/2-(enemy.y+enemy.size/2),
-                    player.x+player.size/2-(enemy.x+enemy.size/2)
-                );
-                enemy.x += Math.cos(ang)*enemySpeed;
-                enemy.y += Math.sin(ang)*enemySpeed;
-                if (player.invincible<=0 &&
-                    player.x<enemy.x+enemy.size && player.x+player.size>enemy.x &&
-                    player.y<enemy.y+enemy.size && player.y+player.size>enemy.y) {
-                    player.hp -= 1;
-                    player.invincible = 40;
-                    killEnemy(enemy);
-                    if (player.hp <= 0) { gameState = 'dead'; createDeathButtons(); }
-                }
-            });
-
-            for (let i = fireballs.length-1; i>=0; i--) {
-                const f = fireballs[i];
-                f.x += f.vx; f.y += f.vy; f.life--;
-                enemies.forEach(e => {
-                    if (!e.alive) return;
-                    const dx = e.x+e.size/2-f.x, dy = e.y+e.size/2-f.y;
-                    if (Math.sqrt(dx*dx+dy*dy) < e.size/2+f.size/2) { killEnemy(e); f.life = 0; }
-                });
-                if (f.life<=0 || f.x<-60 || f.x>canvas.width+60 || f.y<-60 || f.y>canvas.height+60)
-                    fireballs.splice(i,1);
-            }
-
-            for (let i = particles.length-1; i>=0; i--) {
-                const p = particles[i];
-                p.x += p.vx; p.y += p.vy; p.vx*=0.95; p.vy*=0.95; p.life--; p.size*=0.96;
-                if (p.life<=0 || p.size<0.5) particles.splice(i,1);
-            }
-
-            if (Math.random()<0.007 && enemies.filter(e=>e.alive).length < maxEnemies) spawnEnemy();
-        }
-
-        // ===== DRAW =====
-        function draw() {
-            const w = canvas.width, h = canvas.height;
-
-            if (gameState === 'title') {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0,0,w,h);
-                ctx.globalAlpha = titleAlpha;
-                ctx.fillStyle = '#e8d5a3';
-                ctx.font = 'bold 48px Georgia, serif';
-                ctx.textAlign = 'center';
-                ctx.fillText('THE NEW LEGEND', w/2, h/2);
-                ctx.globalAlpha = 1;
-                return;
-            }
-
-            // Fala do Heros depois do andar 3
-            if (gameState === 'floor_comment') {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0,0,w,h);
-                drawDialogBox('Heros',
-                    'Até agora foi fácil, mas os monstros estão ficando mais fortes e rápidos. Tenho que ficar alerta.',
-                    'heros');
-                return;
-            }
-
-            // Tela de transição de andar
-            if (gameState === 'floor_transition') {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0,0,w,h);
-                ctx.fillStyle = '#e8d5a3';
-                ctx.font = 'bold 36px Georgia, serif';
-                ctx.textAlign = 'center';
-                ctx.fillText(transitionName, w/2, h/2 - 10);
-                ctx.font = '18px Georgia, serif';
-                ctx.fillStyle = 'rgba(255,255,255,0.6)';
-                ctx.fillText('Toque ou clique para continuar', w/2, h/2 + 40);
-                return;
-            }
-
-            if (gameState === 'victory') {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0,0,w,h);
-                ctx.fillStyle = '#ffd700';
-                ctx.font = 'bold 42px Georgia, serif';
-                ctx.textAlign = 'center';
-                ctx.fillText('Você sobreviveu aos 7 andares', w/2, h/2 - 30);
-                ctx.fillStyle = '#fff';
-                ctx.font = '20px Georgia, serif';
-                ctx.fillText('Toque para jogar de novo', w/2, h/2 + 30);
-                return;
-            }
-
-            if (['present_heros','story','meeting','friends','tower'].includes(gameState)) {
-                const d = dialogs[dialogIndex];
-                if (gameState === 'meeting' || gameState === 'friends') drawCastleRoom();
-                else {
-                    ctx.fillStyle = '#000';
-                    ctx.fillRect(0,0,w,h);
-                }
-                drawDialogBox(d.speaker, d.text, d.portrait);
-                return;
-            }
-
-            if (gameState === 'playing' || gameState === 'dead') {
-                const theme = getTheme();
-                ctx.fillStyle = theme.ground;
-                ctx.fillRect(0,0,w,h);
-                ctx.fillStyle = theme.accent;
-                for (let i=0;i<w;i+=70) for (let j=0;j<h;j+=70) {
-                    ctx.globalAlpha = 0.13;
-                    ctx.fillRect(i+8,j+8,54,54);
-                }
-                ctx.globalAlpha = 1;
-
-                if (gameState === 'playing') {
-                    enemies.forEach(e => {
-                        if (!e.alive) return;
-                        const s = e.size * (1 + Math.sin(e.anim)*0.08);
-                        const ox = (e.size - s)/2;
-                        ctx.fillStyle = theme.enemy;
-                        ctx.fillRect(e.x+ox, e.y+ox, s, s);
-                        ctx.strokeStyle = '#444';
-                        ctx.lineWidth = 2;
-                        ctx.strokeRect(e.x+ox, e.y+ox, s, s);
-                    });
-                    particles.forEach(p => {
-                        ctx.globalAlpha = Math.min(1, p.life/28);
-                        ctx.fillStyle = p.color;
-                        ctx.beginPath();
-                        ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
-                        ctx.fill();
-                        ctx.globalAlpha = 1;
-                    });
-                    fireballs.forEach(f => {
-                        ctx.beginPath(); ctx.arc(f.x,f.y,f.size,0,Math.PI*2);
-                        ctx.fillStyle = '#ff4400'; ctx.fill();
-                        ctx.beginPath(); ctx.arc(f.x,f.y,f.size*0.55,0,Math.PI*2);
-                        ctx.fillStyle = '#ffcc00'; ctx.fill();
-                    });
-                    if (player.invincible<=0 || Math.floor(player.invincible/3)%2===0) drawPlayer();
-                    if (player.slashTimer > 0) {
-                        const t = player.slashTimer/16;
-                        const cx = player.x+player.size/2, cy = player.y+player.size/2;
-                        ctx.beginPath();
-                        ctx.arc(cx,cy,66,player.angle-1.2,player.angle+1.2);
-                        ctx.strokeStyle = `rgba(150,220,255,${t*0.25})`;
-                        ctx.lineWidth = 16; ctx.lineCap = 'round'; ctx.stroke();
-                        ctx.beginPath();
-                        ctx.arc(cx,cy,58,player.angle-1.0,player.angle+1.0);
-                        ctx.strokeStyle = `rgba(230,250,255,${t*0.85})`;
-                        ctx.lineWidth = 3; ctx.stroke();
-                    }
-                    ctx.fillStyle = '#222';
-                    ctx.fillRect(20,20,180,18);
-                    ctx.fillStyle = player.hp>4 ? '#22cc44' : '#ff3333';
-                    ctx.fillRect(20,20,(player.hp/player.maxHp)*180,18);
-                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-                    ctx.strokeRect(20,20,180,18);
-                    ctx.fillStyle = '#fff';
-                    ctx.font = '14px Arial';
-                    ctx.textAlign = 'left';
-                    ctx.fillText(`HP: ${player.hp}/${player.maxHp}`,28,34);
-                    ctx.fillStyle = '#ffcc00';
-                    ctx.font = '16px Arial';
-                    ctx.fillText(getTheme().name,20,58);
-                    ctx.fillText(`Kills: ${kills}/${killsNeeded}  |  Total: ${totalKills}`,20,80);
-                }
-
-                if (isPaused && gameState === 'playing') {
-                    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-                    ctx.fillRect(0,0,w,h);
-                    ctx.fillStyle = '#fff';
-                    ctx.font = 'bold 42px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('PAUSADO', w/2, h/2-10);
-                    ctx.font = '18px Arial';
-                    ctx.fillStyle = '#ffcc00';
-                    ctx.fillText(isMobile ? 'Toque no botão ❚❚ para continuar' : 'Pressione ESPAÇO para continuar', w/2, h/2+35);
-                }
-
-                if (gameState === 'dead') {
-                    ctx.fillStyle = 'rgba(0,0,0,0.82)';
-                    ctx.fillRect(0,0,w,h);
-                    ctx.fillStyle = '#ff3333';
-                    ctx.font = 'bold 56px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('VOCÊ MORREU', w/2, h/2-90);
-                    ctx.fillStyle = '#fff';
-                    ctx.font = '22px Arial';
-                    ctx.fillText(`Chegou no ${getTheme().name}`, w/2, h/2-35);
-                    ctx.fillText(`Total de monstros: ${totalKills}`, w/2, h/2);
-                    deathButtons.forEach(btn => {
-                        ctx.fillStyle = '#1a1a1a';
-                        ctx.fillRect(btn.x,btn.y,btn.w,btn.h);
-                        ctx.strokeStyle = '#ff6600';
-                        ctx.lineWidth = 3;
-                        ctx.strokeRect(btn.x,btn.y,btn.w,btn.h);
-                        ctx.fillStyle = '#fff';
-                        ctx.font = '20px Arial';
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.fillText(btn.text, btn.x+btn.w/2, btn.y+btn.h/2);
-                    });
-                }
-            }
-        }
-
-        function gameLoop() {
-            update();
-            draw();
-            requestAnimationFrame(gameLoop);
-        }
-
-        carregarImagens().then(() => {
-            gameState = 'title';
-            titleAlpha = 1;
-            titleTimer = 0;
-            dialogIndex = 0;
-            gameLoop();
-        });
-    </script>
+function gameLoop(){update();draw();requestAnimationFrame(gameLoop)}
+carregarImagens().then(()=>{
+  hasSave=checkSaveExists();
+  gameState='title';titleAlpha=1;titleTimer=0;dialogIndex=0;
+  gameLoop();
+});
+</script>
 </body>
 </html>
