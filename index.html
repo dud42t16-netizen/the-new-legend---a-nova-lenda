@@ -31,7 +31,7 @@
 <body>
     <canvas id="gameCanvas"></canvas>
     <div id="mobileControls">
-    <div id="joystickZone"><div id="joystickBase"></div><div>id="joystickKnob"></div></div>
+    <div id="joystickZone"><div id="joystickBase"></div><div id="joystickKnob"></div></div>
     <div id="fireBtn">FOGO</div>
     <div id="pauseBtn">❚❚</div>
     </div>
@@ -39,6 +39,7 @@
   <script>
       const canvas=document.getElementById('gameCanvas');
       const ctx=canvas.getContext('2d');
+
       function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
       resizeCanvas();window.addEventListener('resize',resizeCanvas);
       const isMobile=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
@@ -47,6 +48,7 @@
       const SPRITE_PATH='cavaleiro_sprites/';
       const sprites={},portraits={},friendSprites={};
       let tempestasSp=null,tempestasPortrait=null,ignisSp=null,ignisPortrait=null;
+      let typhonSp=null;
       const loadImage=src=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.onerror=()=>r(null);i.src=src});
 
       async function carregarImagens(){
@@ -68,6 +70,12 @@
         ignisPortrait=await loadImage(SPRITE_PATH+'ignis.png')||await loadImage('ignis.png');
 
         if(ignisPortrait)portraits.ignis=ignisPortrait;
+
+        typhonSp=await loadImage(SPRITE_PATH+'typhon.png')||await loadImage('typhon.png');
+
+        roarAudio=new Audio(SPRITE_PATH+'roar.mp3');
+        roarAudio.preload='auto';
+        roarAudio.volume=0.85;
       }
 
       const animConfig={
@@ -197,6 +205,10 @@
       let ignisOnFire=false;
       let ignisFireTimer=0;
       let lioraBuffGiven=false;
+      let typhonDialogIndex=0;
+      let typhonRoarTimer=0;
+      let typhonRoarParticles=[];
+      let roarAudio=null;
 
       const player={x:0,y:0,size:48,speed:3.8,baseSpeed:3.8,hp:10,maxHp:10,angle:Math.PI/2,dir:'baixo',state:'parado',frame:0,frameTimer:0,attackCooldown:0,fireCooldown:0,slashTimer:0,invincible:0};
       let enemies=[],fireballs=[],enemyShots=[],particles=[],deathButtons=[];
@@ -207,12 +219,17 @@
       const skipBtn=document.getElementById('skipBtn');
 
       function currentFloorData(){return floors[floorOrder[floorIndex]]}
+
       function getTheme(){return currentFloorData()}
+
       function getAnimKey(){if(player.state==='ataque')return'ataque_'+player.dir;if(player.state==='andar')return'andar_'+player.dir;return'parado_'+player.dir}
+
       function isLateSpawn(){return floorOrder[floorIndex]>=25}
+
       function isNarration(d){return !d.speaker||d.speaker===''||(d.portrait===null&&(!d.speaker||d.speaker.trim()===''))}
 
       function checkSaveExists(){try{return !!localStorage.getItem('tnl_save')}catch(e){return false}}
+
       function saveGame(){
         const data={floorIndex,kills,totalKills,killsNeeded,enemySpeed,swordDmg,fireDmg,tripleFire,scaleAfter80,swordRange,swordHit,playerHp:player.hp,playerMaxHp:player.maxHp,playerSpeed:player.speed,playerBaseSpeed:player.baseSpeed,dialogIndex};
         try{localStorage.setItem('tnl_save',JSON.stringify(data));hasSave=true;saveMsgTimer=120}catch(e){}
@@ -329,6 +346,7 @@
         g.addColorStop(0,'rgba(120,60,200,0.18)');g.addColorStop(1,'rgba(0,0,0,0)');
         ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
       }
+
       function drawFlameDialogBg(){
         const w=canvas.width,h=canvas.height;
         const g=ctx.createLinearGradient(0,0,0,h);
@@ -340,6 +358,7 @@
         }
         ctx.fillStyle='rgba(0,0,0,0.35)';ctx.fillRect(0,h*0.55,w,h*0.45);
       }
+
       function drawNarrationScreen(text){
         const w=canvas.width,h=canvas.height;
         ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);
@@ -357,6 +376,7 @@
         ctx.fillStyle='rgba(255,255,255,0.35)';ctx.font='13px Arial';
         ctx.fillText('▼',w/2,h*0.72);
       }
+
       function drawEchoFloor(){
         const w=canvas.width,h=canvas.height;
         ctx.fillStyle='#0c1018';ctx.fillRect(0,0,w,h);
@@ -365,6 +385,7 @@
         ctx.fillStyle='rgba(30,50,80,0.35)';ctx.fillRect(w*0.15,h*0.1,18,h*0.55);ctx.fillRect(w*0.85-18,h*0.1,18,h*0.55);
         ctx.strokeStyle='rgba(100,150,200,0.2)';ctx.lineWidth=3;ctx.strokeRect(10,10,w-20,h-20);
       }
+
       function drawFlameFloor(){
         const w=canvas.width,h=canvas.height;
         const g=ctx.createLinearGradient(0,0,0,h);
@@ -503,6 +524,7 @@
         ];
         barrierY=stopY-8;
       }
+
       function drawSpeechBalloon(x,y,text,borderColor){
         ctx.font='bold 14px Arial';
         const tw=Math.min(ctx.measureText(text).width,260);
@@ -658,6 +680,19 @@
         {speaker:'',portrait:null,text:'Eles correm focados atrás da magia de Ignis, que segue em direção ao próximo andar. Conseguem alcançá-la no último instante. Respiram aliviados… mas, quando se dão conta, já estão no último andar. A entrada atrás deles se fecha. E havia um problema maior: depois da batalha intensa com Ignis, ninguém havia descansado. Feridos e cansados, o grupo se vê em um andar assustador, sentindo uma presença que fazia a de Ignis parecer um inseto.'}
       ];
 
+        const typhonDialogs=[
+          {speaker:'Typhon',portrait:null,text:'Eu sou Typhon, rei dos monstros. Humanos… pagaram pelas vidas dos meus filhos.'},
+          {speaker:'',portrait:null,text:'Todos ficam em silêncio, observando aterrorizados e ainda ofegantes.'},
+          {speaker:'',portrait:null,text:'Typhon concentra a visão em Heros.'},
+          {speaker:'Typhon',portrait:null,text:'Você? Eu sabia que Ignis tinha falhado em sua missão, mas não esperava que viesse até mim tão cedo. Você tem a mesma presença daquele verme petulante. Parece que eu estava certo em minha hipótese… mas parece mais fraco. Acho que ainda não chegou ao seu potencial máximo.'},
+          {speaker:'Heros',portrait:'heros',text:'Cale-se. Viemos dar um fim a você, e isso é o que vamos fazer. Prepare-se, lagarto de asas.'},
+          {speaker:'',portrait:null,text:'Ouvindo o grito de Heros, seus amigos se recompõem.'},
+          {speaker:'Liora',portrait:'liora',text:'Vamos.'},
+          {speaker:'Valeria',portrait:'valeria',text:'Vamos com tudo até o fim.'},
+          {speaker:'Lucian',portrait:'lucian',text:'Você vai cair, bicho feio.'},
+          {speaker:'Typhon',portrait:null,text:'Quanta arrogância. Vocês estão diante de um deus, criaturas insignificantes. Mostrarei o terror a vocês, vermes.'}
+        ];
+
       const rescueDialogs=[
         {speaker:'',portrait:null,text:'Seus amigos vieram ao seu resgate. Em lágrimas, eles te salvaram.'},
         {speaker:'Liora',portrait:'liora',text:'Heros, estamos aqui. Estamos com você.'},
@@ -804,14 +839,21 @@
         setupPartyAllies();
         player.maxHp=10+floorIndex*10;player.hp=player.maxHp;
         player.x=canvas.width/2-player.size/2;player.y=canvas.height*0.62;player.invincible=40;
-        const dw=Math.min(canvas.width*0.55,320),dh=Math.min(canvas.height*0.42,280);
-        boss={x:(canvas.width-dw)/2,y:30,w:dw,h:dh,hp:6100,maxHp:6100,anim:0,kind:'dragon',phase:1,shootCd:90,windCd:180,reflectCd:400,crackCd:150,grabCd:200};
-        dragonPhase=1;dragonPhaseThreshold=4067;dragonMode='both';dragonModeTimer=360;
+        const maxH=Math.min(canvas.height*0.48,320);
+        const img=typhonSp;
+        const dw=img?img.width*(maxH/img.height):Math.min(canvas.width*0.5,280);
+        const dh=maxH;
+        boss={
+          x:(canvas.width-dw)/2,y:18,w:dw,h:dh,
+          hp:6100,maxHp:6100,anim:0,kind:'dragon',phase:1,
+          shootCd:120,windCd:200,reflectCd:450,crackCd:180,grabCd:250
+        };
+        dragonPhase=1;dragonPhaseThreshold=4067;dragonMode='both';dragonModeTimer=480;
         dragonWind=0;dragonWindTimer=0;dragonStun=0;dragonGrab=0;dragonGrabMash=0;floorCracks=[];
         bossProjectiles=[];groundMarks=[];allyShootTimer=600;
         lucianBalloon=null;
-        lioraBalloon={text:'Heros, fique atento ao vento das asas!',timer:180};
-        valeriaBalloon={text:'Cuidado! Esse monstro é diferente!',timer:160};
+        lioraBalloon={text:'Heros, fique atento ao vento das asas!',timer:190};
+        valeriaBalloon={text:'Cuidado! Esse monstro é diferente!',timer:190};
       }
 
       function onDragonPhaseEnd(){
@@ -831,88 +873,160 @@
       }
 
       function drawDragon(b){
-        const cx=b.x+b.w/2,cy=b.y+b.h*0.45,scale=Math.min(b.w,b.h)/180,t=b.anim||0;
-        const wing=Math.sin(t*0.08)*0.35+(dragonWind!==0?0.5:0),stunned=dragonStun>0;
-        ctx.fillStyle='rgba(0,0,0,0.4)';ctx.beginPath();ctx.ellipse(cx,b.y+b.h+8,b.w*0.45,14,0,0,Math.PI*2);ctx.fill();
-        [[-1,-0.6],[1,0.6]].forEach(([side,baseRot])=>{
-          ctx.save();ctx.translate(cx+side*40*scale,cy-20*scale);ctx.rotate(side*baseRot+side*wing);
-          ctx.fillStyle='#3a1218';
-          ctx.beginPath();ctx.moveTo(0,0);
-          ctx.quadraticCurveTo(side*-80*scale,-60*scale,side*-140*scale,10*scale);
-          ctx.quadraticCurveTo(side*-100*scale,50*scale,side*-40*scale,30*scale);
-          ctx.quadraticCurveTo(side*-20*scale,15*scale,0,0);ctx.fill();
-          ctx.restore();
-        });
-        ctx.fillStyle='#3a1018';ctx.beginPath();ctx.ellipse(cx,cy,70*scale,55*scale,0,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle='#4a1820';ctx.beginPath();ctx.ellipse(cx+20*scale,cy-105*scale,32*scale,24*scale,0.2,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle='#ff2222';ctx.beginPath();ctx.ellipse(cx+28*scale,cy-107*scale,5*scale,3.5*scale,0,0,Math.PI*2);ctx.fill();
+        const cx=b.x+b.w/2,cy=b.y+b.h*0.5;
+        const stunned=dragonStun>0;
+
+        // sombra
+        ctx.fillStyle='rgba(0,0,0,0.4)';
+        ctx.beginPath();ctx.ellipse(cx,b.y+b.h+8,b.w*0.42,12,0,0,Math.PI*2);ctx.fill();
+
+        if(typhonSp){
+          // sprite quase parado — só um leve balanço vertical bem sutil
+          const bob=Math.sin((b.anim||0)*0.04)*2;
+          const dw=b.w,dh=b.h;
+          ctx.drawImage(typhonSp,b.x,b.y+bob,dw,dh);
+        }else{
+          // fallback se a imagem não carregar
+          ctx.fillStyle='#2a1518';
+          ctx.beginPath();ctx.ellipse(cx,cy,b.w*0.4,b.h*0.38,0,0,Math.PI*2);ctx.fill();
+          ctx.fillStyle='#ff2222';
+          ctx.beginPath();ctx.arc(cx+b.w*0.15,cy-b.h*0.15,6,0,Math.PI*2);ctx.fill();
+        }
+
+        // vento VISÍVEL
+        if(dragonWind!==0){
+          const dir=dragonWind;
+          const t=b.anim||0;
+          for(let i=0;i<10;i++){
+            const wy=b.y+25+i*26+Math.sin(t*0.12+i)*10;
+            const wx=dir<0?b.x-15:b.x+b.w+15;
+            const alpha=0.3+Math.sin(t*0.18+i*0.4)*0.2;
+            ctx.strokeStyle=`rgba(170,210,255,${alpha})`;
+            ctx.lineWidth=2.5;
+            ctx.beginPath();
+            ctx.moveTo(wx,wy);
+            ctx.quadraticCurveTo(wx+dir*50,wy-12,wx+dir*110,wy+Math.sin(t*0.1+i)*18);
+            ctx.stroke();
+            ctx.fillStyle=`rgba(200,230,255,${alpha*0.85})`;
+            ctx.beginPath();ctx.arc(wx+dir*(35+i*7),wy+Math.sin(t*0.1+i)*10,2.5,0,Math.PI*2);ctx.fill();
+          }
+          ctx.fillStyle='rgba(160,210,255,0.95)';ctx.font='bold 15px Arial';ctx.textAlign='center';
+          ctx.fillText(dir<0?'← VENTO':'VENTO →',cx,b.y-10);
+        }
+
+        // stun
         if(stunned){
-          ctx.strokeStyle='rgba(255,220,80,0.7)';ctx.lineWidth=4;ctx.strokeRect(b.x-8,b.y-8,b.w+16,b.h+16);
-          ctx.fillStyle='rgba(255,230,100,0.9)';ctx.font='bold 16px Arial';ctx.textAlign='center';
-          ctx.fillText('DESNORTEADO!',cx,b.y-14);
+          ctx.strokeStyle='rgba(255,220,80,0.8)';ctx.lineWidth=5;
+          ctx.strokeRect(b.x-8,b.y-8,b.w+16,b.h+16);
+          ctx.fillStyle='rgba(255,230,100,0.95)';ctx.font='bold 18px Arial';ctx.textAlign='center';
+          ctx.fillText('DESNORTEADO!',cx,b.y-16);
+          for(let i=0;i<5;i++){
+            const ang=(b.anim||0)*0.06+i*1.26;
+            ctx.fillStyle='#ffee88';
+            ctx.beginPath();ctx.arc(cx+Math.cos(ang)*55,b.y-8+Math.sin(ang)*10,3,0,Math.PI*2);ctx.fill();
+          }
         }
       }
 
      function updateDragon(){
         if(!boss||boss.kind!=='dragon'||boss.hp<=0)return;
-        boss.anim++;
+        boss.anim++; // só pra bob e vento, movimento quase zero
         if(dragonStun>0){dragonStun--;return}
+
+        // troca de modo (intervalos grandes)
         dragonModeTimer--;
         if(dragonModeTimer<=0){
           dragonMode=['both','sword','magic'][Math.floor(Math.random()*3)];
-          dragonModeTimer=300+Math.random()*200;
-          if(dragonMode==='sword')lioraBalloon={text:'Só a espada funciona agora!',timer:120};
-          else if(dragonMode==='magic')valeriaBalloon={text:'Use magia! A espada não corta!',timer:120};
+          dragonModeTimer=450+Math.random()*300;
+          if(dragonMode==='sword')lioraBalloon={text:'Só a espada funciona agora!',timer:140};
+          else if(dragonMode==='magic')valeriaBalloon={text:'Use magia! A espada não corta!',timer:140};
         }
+
+        // vento (intervalo grande)
         boss.windCd=Math.max(0,(boss.windCd||0)-1);
-        if(boss.windCd<=0&&Math.random()<0.008){
-          dragonWind=Math.random()<0.5?-1:1;dragonWindTimer=90+Math.random()*60;boss.windCd=200;
-          lioraBalloon={text:'Vento! Segure firme!',timer:100};
+        if(boss.windCd<=0&&Math.random()<0.0045){
+          dragonWind=Math.random()<0.5?-1:1;
+          dragonWindTimer=110+Math.random()*50;
+          boss.windCd=300+Math.random()*140;
+          lioraBalloon={text:'Vento! Segure firme!',timer:110};
         }
-        if(dragonWindTimer>0){dragonWindTimer--;player.x+=dragonWind*2.2;if(dragonWindTimer<=0)dragonWind=0}
+        if(dragonWindTimer>0){
+          dragonWindTimer--;
+          player.x+=dragonWind*1.7;
+          if(dragonWindTimer<=0)dragonWind=0;
+        }
+
+        // rachaduras (mais raras, menos dano)
         boss.crackCd=Math.max(0,(boss.crackCd||0)-1);
-        if(boss.crackCd<=0&&floorCracks.length<4&&Math.random()<0.01){
-          floorCracks.push({x:60+Math.random()*(canvas.width-120),y:canvas.height*0.45+Math.random()*canvas.height*0.25,w:40+Math.random()*50,h:12,life:240,dmg:8});
-          boss.crackCd=160;
+        if(boss.crackCd<=0&&floorCracks.length<3&&Math.random()<0.006){
+          floorCracks.push({
+            x:60+Math.random()*(canvas.width-120),
+            y:canvas.height*0.48+Math.random()*canvas.height*0.22,
+            w:42+Math.random()*48,h:12,life:280,dmg:5
+          });
+          boss.crackCd=240+Math.random()*90;
         }
         for(let i=floorCracks.length-1;i>=0;i--){
           const c=floorCracks[i];c.life--;
           if(player.invincible<=0&&player.x+player.size>c.x&&player.x<c.x+c.w&&player.y+player.size>c.y&&player.y<c.y+c.h){
-            player.hp-=c.dmg;player.invincible=35;
+            player.hp-=c.dmg;player.invincible=42;
             if(player.hp<=0){player.hp=0;gameState='dead';createDeathButtons()}
           }
           if(c.life<=0)floorCracks.splice(i,1);
         }
+
+        // grab (bem raro)
         boss.grabCd=Math.max(0,(boss.grabCd||0)-1);
-        if(dragonGrab<=0&&boss.grabCd<=0&&Math.random()<0.004){
-          if(Math.hypot(player.x+player.size/2-(boss.x+boss.w/2),player.y+player.size/2-(boss.y+boss.h*0.6))<160){
-            dragonGrab=180;dragonGrabMash=0;boss.grabCd=320;
-            valeriaBalloon={text:'Heros! Ataca rápido pra se soltar!',timer:120};
+        if(dragonGrab<=0&&boss.grabCd<=0&&Math.random()<0.0028){
+          if(Math.hypot(player.x+player.size/2-(boss.x+boss.w/2),player.y+player.size/2-(boss.y+boss.h*0.55))<155){
+            dragonGrab=150;dragonGrabMash=0;boss.grabCd=420;
+            valeriaBalloon={text:'Heros! Ataca rápido pra se soltar!',timer:130};
           }
         }
         if(dragonGrab>0){
-          dragonGrab--;player.hp-=0.12;
-          if(dragonGrabMash>=40||dragonGrab<=0){dragonGrab=0;dragonGrabMash=0;player.invincible=40}
+          dragonGrab--;
+          player.hp-=0.07;
+          if(dragonGrabMash>=40||dragonGrab<=0){dragonGrab=0;dragonGrabMash=0;player.invincible=45}
           if(player.hp<=0){player.hp=0;gameState='dead';createDeathButtons()}
         }
+
+        // projéteis (intervalo maior, dano menor)
         boss.shootCd=Math.max(0,(boss.shootCd||0)-1);
         if(boss.shootCd<=0){
-          boss.shootCd=70+Math.random()*40;
+          boss.shootCd=110+Math.random()*55;
           const ang=Math.atan2(player.y+player.size/2-(boss.y+boss.h*0.4),player.x+player.size/2-(boss.x+boss.w/2));
-          for(let i=-1;i<=1;i++)bossProjectiles.push({type:'ember',x:boss.x+boss.w/2,y:boss.y+boss.h*0.35,vx:Math.cos(ang+i*0.2)*4.2,vy:Math.sin(ang+i*0.2)*4.2,size:11,life:100,dmg:12});
+          for(let i=-1;i<=1;i++){
+            bossProjectiles.push({
+              type:'ember',x:boss.x+boss.w/2,y:boss.y+boss.h*0.32,
+              vx:Math.cos(ang+i*0.2)*3.4,vy:Math.sin(ang+i*0.2)*3.4,
+              size:11,life:115,dmg:8
+            });
+          }
         }
+
+        // rebate (raro)
         boss.reflectCd=Math.max(0,(boss.reflectCd||0)-1);
-        if(boss.reflectCd<=0&&Math.random()<0.006){
-          boss.reflectCd=480;
+        if(boss.reflectCd<=0&&Math.random()<0.0035){
+          boss.reflectCd=580+Math.random()*140;
           const ang=Math.atan2(player.y+player.size/2-(boss.y+boss.h*0.4),player.x+player.size/2-(boss.x+boss.w/2));
-          bossProjectiles.push({type:'reflectable',x:boss.x+boss.w/2,y:boss.y+boss.h*0.35,vx:Math.cos(ang)*2.8,vy:Math.sin(ang)*2.8,size:20,life:180,dmg:16,reflected:false});
-          reflectWindow=130;lioraBalloon={text:'Heros! Rebata essa magia!',timer:130};
+          bossProjectiles.push({
+            type:'reflectable',x:boss.x+boss.w/2,y:boss.y+boss.h*0.32,
+            vx:Math.cos(ang)*2.4,vy:Math.sin(ang)*2.4,
+            size:20,life:210,dmg:11,reflected:false
+          });
+          reflectWindow=145;
+          lioraBalloon={text:'Heros! Rebata essa magia!',timer:145};
         }
+
+        // aliados
         allyShootTimer--;
         if(allyShootTimer<=0){
           allyShootTimer=600;
-          partyAllies.forEach(a=>{bossProjectiles.push({type:'ally',x:a.x,y:a.y+10,vx:0,vy:0,size:9,life:160,dmg:5,home:true})});
+          partyAllies.forEach(a=>{
+            bossProjectiles.push({type:'ally',x:a.x,y:a.y+10,vx:0,vy:0,size:9,life:160,dmg:5,home:true});
+          });
         }
+
         if(lucianBalloon){lucianBalloon.timer--;if(lucianBalloon.timer<=0)lucianBalloon=null}
         if(lioraBalloon){lioraBalloon.timer--;if(lioraBalloon.timer<=0)lioraBalloon=null}
         if(valeriaBalloon){valeriaBalloon.timer--;if(valeriaBalloon.timer<=0)valeriaBalloon=null}
@@ -1171,6 +1285,7 @@
       }
 
       function togglePause(){if(gameState!=='playing')return;isPaused=!isPaused;if(isPaused)setupPauseButtons()}
+
       function hitButton(mx,my,btn){return btn&&mx>=btn.x&&mx<=btn.x+btn.w&&my>=btn.y&&my<=btn.y+btn.h}
 
       function onAdvance(){
@@ -1202,7 +1317,38 @@
 
         if(gameState==='post_ignis'){
           postIgnisIndex++;
-          if(postIgnisIndex>=postIgnisDialogs.length)goToTransition();
+          if(postIgnisIndex>=postIgnisDialogs.length){
+            // chega no andar 100 e abre o diálogo do Typhon
+            floorIndex=floorOrder.length-1; // último andar (100)
+            typhonDialogIndex=0;
+            gameState='typhon_dialog';
+            skipBtn.style.display='none';
+            // posiciona o boss só pra desenhar na cutscene
+            const maxH=Math.min(canvas.height*0.48,320);
+            const img=typhonSp;
+            const dw=img?img.width*(maxH/img.height):Math.min(canvas.width*0.5,280);
+
+            boss={x:(canvas.width-dw)/2,y:18,w:dw,h:maxH,hp:6100,maxHp:6100,anim:0,kind:'dragon'};
+
+            setupPartyAllies();
+            player.x=canvas.width/2-player.size/2;
+            player.y=canvas.height*0.58;
+          }
+          return;
+        }
+
+        if(gameState==='typhon_dialog'){
+          typhonDialogIndex++;
+          if(typhonDialogIndex>=typhonDialogs.length){
+            // começa a cutscene do rugido
+            gameState='typhon_roar';
+            typhonRoarTimer=0;
+            typhonRoarParticles=[];
+            if(roarAudio){
+              roarAudio.currentTime=0;
+              roarAudio.play().catch(()=>{});
+            }
+          }
           return;
         }
 
@@ -1232,20 +1378,27 @@
         e.preventDefault();
         const rect=canvas.getBoundingClientRect();const mx=e.clientX-rect.left,my=e.clientY-rect.top;
         if(gameState==='menu'){menuButtons.forEach(b=>{if(!b.disabled&&hitButton(mx,my,b))b.action()});return}
+
         if(gameState==='playing'&&isPaused){pauseButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
+
         if(gameState==='dead'){deathButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
         if(gameState==='floor_transition'){if(hitButton(mx,my,transitionBtn))applyNextFloor();return}
         if(gameState==='floor_clear')return;
-        if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','victory'].includes(gameState)){onAdvance();return}
+
+        if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','victory'].includes(gameState)){onAdvance();return}
+
         if(gameState==='playing'&&!isPaused){if(e.button===0)mouse.left=true;if(e.button===2)mouse.right=true}
       });
+
       canvas.addEventListener('mouseup',e=>{if(e.button===0)mouse.left=false;if(e.button===2)mouse.right=false});
       canvas.addEventListener('contextmenu',e=>e.preventDefault());
       joyZone.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();if(joyActive||isPaused||gameState!=='playing')return;const t=e.changedTouches[0];joyActive=true;joyTouchId=t.identifier;handleJoy(t)},{passive:false});
       joyZone.addEventListener('touchmove',e=>{e.preventDefault();e.stopPropagation();if(!joyActive)return;for(let t of e.changedTouches)if(t.identifier===joyTouchId){handleJoy(t);break}},{passive:false});
+
       function endJoy(e){for(let t of e.changedTouches)if(t.identifier===joyTouchId){joyActive=false;joyTouchId=null;joyDX=0;joyDY=0;joyKnob.style.top='30px';joyKnob.style.left='30px';break}}
       joyZone.addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation();endJoy(e)},{passive:false});
       joyZone.addEventListener('touchcancel',e=>{e.preventDefault();endJoy(e)},{passive:false});
+
       function handleJoy(touch){const rect=joyZone.getBoundingClientRect();const cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;let dx=touch.clientX-cx,dy=touch.clientY-cy;const dist=Math.sqrt(dx*dx+dy*dy),maxD=38;if(dist>maxD){dx=dx/dist*maxD;dy=dy/dist*maxD}joyKnob.style.left=(30+dx)+'px';joyKnob.style.top=(30+dy)+'px';joyDX=dx/maxD;joyDY=dy/maxD}
       document.getElementById('fireBtn').addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();if(gameState==='playing'&&!isPaused)createFireball()},{passive:false});
       document.getElementById('pauseBtn').addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();if(gameState==='playing')togglePause()},{passive:false});
@@ -1257,7 +1410,9 @@
         if(gameState==='dead'){deathButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
         if(gameState==='floor_transition'){if(hitButton(mx,my,transitionBtn))applyNextFloor();return}
         if(gameState==='floor_clear')return;
-        if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','victory'].includes(gameState)){onAdvance();return}
+
+        if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','victory'].includes(gameState)){onAdvance();return}
+
         if(gameState!=='playing'||isPaused)return;
         const joyR=joyZone.getBoundingClientRect(),fireR=document.getElementById('fireBtn').getBoundingClientRect(),pauseR=document.getElementById('pauseBtn').getBoundingClientRect();
         const onJoy=t.clientX>=joyR.left&&t.clientX<=joyR.right&&t.clientY>=joyR.top&&t.clientY<=joyR.bottom;
@@ -1687,9 +1842,45 @@
 
      function update(){
         if(gameState==='title'){titleTimer++;if(titleTimer>90){titleAlpha-=0.012;if(titleAlpha<=0){titleAlpha=0;hasSave=checkSaveExists();gameState='menu';setupMenuButtons()}}return}
+
         if(gameState==='floor_clear'){clearTimer--;if(clearTimer<=0)afterClearSequence();return}
+
+          if(gameState==='typhon_roar'){
+            typhonRoarTimer++;
+            if(boss)boss.anim++;
+
+            // partículas de vento fortes vindo de cima do dragão pra baixo
+            if(typhonRoarTimer<90){
+              for(let i=0;i<4;i++){
+                typhonRoarParticles.push({
+                  x:boss.x+boss.w*0.3+Math.random()*boss.w*0.4,
+                  y:boss.y+boss.h*0.35,
+                  vx:(Math.random()-0.5)*3,
+                  vy:4+Math.random()*6,
+                  life:40+Math.random()*30,
+                  size:2+Math.random()*4,
+                  alpha:0.7+Math.random()*0.3
+                });
+              }
+            }
+            for(let i=typhonRoarParticles.length-1;i>=0;i--){
+              const p=typhonRoarParticles[i];
+              p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;p.life--;p.alpha*=0.97;
+              if(p.life<=0||p.y>canvas.height)typhonRoarParticles.splice(i,1);
+            }
+
+            // depois do rugido (~3s de áudio + folga) começa a luta
+            if(typhonRoarTimer>200){
+              typhonRoarParticles=[];
+              startDragonBattle();
+            }
+            return;
+          }
+
         if(gameState==='rescue'){updateRescue();return}
-        if(['post10','post50','post60','post80','post93','post96','pre_rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','menu'].includes(gameState))return;
+
+        if(['post10','post50','post60','post80','post93','post96','pre_rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','menu'].includes(gameState))return;
+
         if(gameState!=='playing'||isPaused)return;
 
         updateFlameParticles();
@@ -1854,6 +2045,7 @@
         });
         if(saveMsgTimer>0){ctx.fillStyle='rgba(255,100,80,0.9)';ctx.font='14px Arial';ctx.textAlign='center';ctx.fillText('Nenhum jogo salvo encontrado',w/2,h*0.75)}
       }
+
       function drawPauseOverlay(){
         const w=canvas.width,h=canvas.height;
         ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,0,w,h);
@@ -1907,25 +2099,105 @@
             drawDialogBox(d.speaker,d.text,d.portrait);return;
           }
 
+            if(gameState==='typhon_dialog'){
+              const d=typhonDialogs[Math.min(typhonDialogIndex,typhonDialogs.length-1)];
+              if(!d)return;
+
+              // narração = tela preta só com texto
+              if(isNarration(d)){
+                drawNarrationScreen(d.text);
+                return;
+              }
+
+              // se quem fala é o Typhon → mostra o dragão no fundo
+              if(d.speaker==='Typhon'){
+                drawThroneBg();
+                if(boss)drawDragon(boss);
+                drawPartyAllies();
+                if(player)drawPlayer();
+                drawDialogBox(d.speaker,d.text,null); // sem portrait, o sprite já é ele
+                return;
+              }
+
+              // fala do Heros ou dos amigos → Typhon SAI, só o fundo + portrait de quem fala
+              drawThroneBg();
+              // NÃO desenha o boss/dragon aqui
+              drawPartyAllies();
+              if(player)drawPlayer();
+              drawDialogBox(d.speaker,d.text,d.portrait);
+              return;
+            }
+
+            if(gameState==='typhon_roar'){
+              drawThroneBg();
+              if(boss){
+                // leve tremor no dragão durante o rugido
+                const shake=typhonRoarTimer<100?Math.sin(typhonRoarTimer*0.8)*3:0;
+                ctx.save();
+                ctx.translate(shake,0);
+                drawDragon(boss);
+                ctx.restore();
+              }
+              // os quatro parados olhando
+              drawPartyAllies();
+              if(player)drawPlayer();
+
+              // vento forte detalhado (de cima do dragão pra baixo)
+              typhonRoarParticles.forEach(p=>{
+                ctx.globalAlpha=p.alpha;
+                const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.size*3);
+                g.addColorStop(0,'rgba(200,230,255,0.9)');
+                g.addColorStop(0.5,'rgba(140,180,255,0.4)');
+                g.addColorStop(1,'rgba(80,120,200,0)');
+                ctx.fillStyle=g;
+                ctx.beginPath();ctx.arc(p.x,p.y,p.size*3,0,Math.PI*2);ctx.fill();
+                // linhas de vento
+                ctx.strokeStyle=`rgba(180,210,255,${p.alpha*0.6})`;
+                ctx.lineWidth=1.5;
+                ctx.beginPath();
+                ctx.moveTo(p.x,p.y-p.size*4);
+                ctx.lineTo(p.x+p.vx*2,p.y+p.size*6);
+                ctx.stroke();
+              });
+              ctx.globalAlpha=1;
+
+              // tela treme um pouco
+              if(typhonRoarTimer<100){
+                ctx.fillStyle=`rgba(255,255,255,${0.03+Math.sin(typhonRoarTimer*0.5)*0.02})`;
+                ctx.fillRect(0,0,w,h);
+              }
+              return;
+            }
+
           if(gameState==='post10'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);if(post10Step===0)drawDialogBox('Heros','Os monstros ficam mais fortes a cada andar. Já estou há algumas horas aqui dentro. Vou descansar mais um pouco e avançar.','heros');else if(post10Step===1){ctx.fillStyle='#e8d5a3';ctx.font='bold 28px Georgia,serif';ctx.textAlign='center';ctx.fillText('A cada andar você fica mais forte e habilidoso.',w/2,h/2)}else{ctx.fillStyle='#e8d5a3';ctx.font='bold 32px Georgia,serif';ctx.textAlign='center';ctx.fillText('Andar limpo',w/2,h/2-20);ctx.font='20px Georgia,serif';ctx.fillStyle='#fff';ctx.fillText('Você descansa um pouco e avança.',w/2,h/2+25)}return}
+
           if(gameState==='post50'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);drawDialogBox('Heros','Já estou quase dois dias aqui. Está ficando muito difícil. Tenho que descansar mais tempo antes de subir um andar. Já sofri alguns ferimentos. Por sorte, quando limpo um andar ele fica vazio, então consigo dormir, comer e descansar. Nos últimos andares eu tive que usar mais estratégia. Sei que vai piorar. Vou descansar mais, fazer uns curativos e avançar. Não posso parar. E não vou.','heros');return}
+
           if(gameState==='post60'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);drawDialogBox('Heros','Consigo sentir que estou mais forte. Vou avançar.','heros');return}
+
           if(gameState==='post80'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);drawDialogBox('Heros','Já perdi as contas dos andares, mas sei que estou perto. Já quase quatro dias aqui. Dormir já não está sendo mais suficiente. Já estou ficando exausto. Os monstros são muito fortes. Não irei me render para esses vermes malditos. Vou ter que começar a descansar por mais tempo.','heros');return}
+
           if(gameState==='post93'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);drawDialogBox('Heros','Já não estou mais aguentando. Meus remédios e poções já estão acabando, minha comida também. Já estou exausto. Estou uns 6 dias aqui, eu acho. Tive que começar a descansar mais. Os monstros estão em um nível absurdo. Tenho que me livrar deles ou a humanidade já era. Pelo meu lar, pelos meus amigos queridos, darei um fim a esses vermes.','heros');return}
+
           if(gameState==='post96'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);if(post96Step===0)drawDialogBox('Heros','Droga... já estou sem forças e muito ferido. Esse último andar exigiu demais. Tenho que continuar... vou descansar um pouco...','heros');else drawDialogBox('','Heros desmaia antes de terminar a frase. Ferido e exausto, ele já tinha dado tudo de si há muito tempo. Normalmente seria impossível uma pessoa sozinha chegar até esse andar. Heros acorda exausto, sentindo o selo da torre já se romper, junta forças e parte ao próximo andar.',null);return}
+
           if(gameState==='rescue'){drawRescueScene();return}
+
           if(gameState==='floor_transition'){
             ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.fillStyle='#e8d5a3';ctx.font='bold 36px Georgia,serif';ctx.textAlign='center';ctx.fillText(transitionName,w/2,h/2-30);
             if(transitionBtn){ctx.fillStyle='#1a1a1a';ctx.fillRect(transitionBtn.x,transitionBtn.y,transitionBtn.w,transitionBtn.h);ctx.strokeStyle='#c9a227';ctx.lineWidth=3;ctx.strokeRect(transitionBtn.x,transitionBtn.y,transitionBtn.w,transitionBtn.h);ctx.fillStyle='#fff';ctx.font='20px Georgia,serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(transitionBtn.text,transitionBtn.x+transitionBtn.w/2,transitionBtn.y+transitionBtn.h/2)}
             return;
           }
+
           if(gameState==='victory'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.fillStyle='#ffd700';ctx.font='bold 32px Georgia,serif';ctx.textAlign='center';ctx.fillText('Juntos até o fim',w/2,h/2-40);ctx.fillStyle='#fff';ctx.font='18px Georgia,serif';ctx.fillText('Heros e seus amigos seguem adiante.',w/2,h/2+10);ctx.fillText('Toque para voltar ao menu',w/2,h/2+50);return}
+
           if(['present_heros','story','meeting','friends','tower'].includes(gameState)){
             const d=dialogs[dialogIndex];
             if(isNarration(d)&&d.type!=='present'){drawNarrationScreen(d.text);return}
             if(gameState==='meeting'||gameState==='friends')drawCastleRoom();else{ctx.fillStyle='#000';ctx.fillRect(0,0,w,h)}
             drawDialogBox(d.speaker,d.text,d.portrait);return;
           }
+
           if(gameState==='playing'||gameState==='dead'){
             const theme=getTheme();
             drawFloorBackground(theme);
@@ -1980,17 +2252,23 @@
               ctx.fillText(`HP: ${Math.ceil(player.hp)}/${player.maxHp}`,20+95,18+11);
               ctx.textAlign='left';ctx.textBaseline='alphabetic';
               ctx.fillStyle='#ffcc00';ctx.font='16px Arial';ctx.fillText(getTheme().name,20,56);
+
               if(killsNeeded>0)ctx.fillText(`Kills: ${kills}/${killsNeeded}  |  Total: ${totalKills}`,20,78);
               else ctx.fillText(`Total: ${totalKills}`,20,78);
+
               if(boss&&boss.kind==='ignis'){
                 ctx.fillStyle='#222';ctx.fillRect(20,95,180,12);
+
                 const heatColor=heat>70?'#ff2200':heat>40?'#ff8800':'#ffcc44';
                 ctx.fillStyle=heatColor;ctx.fillRect(20,95,180*(heat/heatMax),12);
                 ctx.strokeStyle='#ffaa60';ctx.lineWidth=1;ctx.strokeRect(20,95,180,12);
                 ctx.fillStyle='#ffcc88';ctx.font='11px Arial';ctx.fillText('CALOR',28,105);
+
                 if(damageBuff>0){ctx.fillStyle='#88ddff';ctx.font='bold 12px Arial';ctx.fillText('BUFF DA LIORA!',28,125)}
+
                 if(ignisDown){ctx.fillStyle='#ffee88';ctx.font='bold 13px Arial';ctx.fillText('IGNIS CAÍDO '+Math.floor(ignisDownDamage)+'/100',28,145)}
               }
+
               if(boss&&boss.kind==='dragon'){
                 ctx.fillStyle=dragonMode==='sword'?'#88aaff':dragonMode==='magic'?'#ff8866':'#aaffaa';
                 ctx.font='bold 14px Arial';
@@ -1999,6 +2277,7 @@
                 if(dragonGrab>0){ctx.fillStyle='#ff6644';ctx.font='bold 16px Arial';ctx.fillText('AGARRADO! '+Math.floor(dragonGrabMash)+'/40',20,145)}
               }
             }
+
             if(isPaused&&gameState==='playing')drawPauseOverlay();
             if(gameState==='dead'){
               ctx.fillStyle='rgba(0,0,0,0.82)';ctx.fillRect(0,0,w,h);
