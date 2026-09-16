@@ -174,7 +174,8 @@
       let ignisDialogIndex=0;
       let postIgnisIndex=0;
       let dragonMode='both',dragonModeTimer=0,dragonWind=0,dragonWindTimer=0,dragonStun=0;
-      let dragonGrab=0,dragonGrabMash=0,floorCracks=[],dragonPhase=1,dragonPhaseThreshold=4067;
+      let dragonGrab=0,dragonGrabMash=0,floorCracks=[],dragonPhase=1,dragonPhaseThreshold=4067,dragonPhaseThreshold2=2034;
+      let phase3DialogIndex=0;
       let boss=null;
       let bossProjectiles=[];
       let groundMarks=[];
@@ -207,6 +208,13 @@
       let lioraBuffGiven=false;
       let typhonDialogIndex=0;
       let typhonRoarTimer=0;
+      let phase2DialogIndex=0;
+      let phase2IntroTimer=0;
+      let partyHP=150;
+      let partyMaxHP=150;
+      let friendsDown=false;
+      let phase2Shot=null; // um ataque por vez
+      let phase2ShotCd=0;
       let typhonRoarParticles=[];
       let roarAudio=null;
 
@@ -543,7 +551,9 @@
 
       function drawPartyAllies(){
         if(!getTheme().allies||!partyAllies.length)return;
-        if((boss||getTheme().boss==='ignis')&&gameState==='playing'){
+
+        // barreira só se NÃO estiver fase 2 / friends down
+        if(!friendsDown&&(boss||getTheme().boss==='ignis')&&gameState==='playing'){
           barrierPulse+=0.06;
           const pulse=0.55+Math.sin(barrierPulse)*0.2;
           const g0=ctx.createLinearGradient(0,barrierY-14,0,barrierY+18);
@@ -556,17 +566,43 @@
           ctx.strokeStyle=`rgba(160,220,255,${0.55+pulse*0.25})`;ctx.lineWidth=2.5;
           ctx.beginPath();ctx.moveTo(0,barrierY);ctx.lineTo(canvas.width,barrierY);ctx.stroke();
         }
+
         partyAllies.forEach(a=>{
           const img=friendSprites[a.key];
-          if(img){const scale=a.size/img.height;const dw=img.width*scale;ctx.drawImage(img,a.x-dw/2,a.y,dw,a.size)}
-          else{ctx.fillStyle='#888';ctx.fillRect(a.x-20,a.y,40,a.size)}
+          if(a.down){
+            // deitado: desenha de lado / mais baixo
+            if(img){
+              const scale=(a.size*0.85)/img.height;
+              const dw=img.width*scale,dh=img.height*scale;
+              ctx.save();
+              ctx.translate(a.x,a.y+dh*0.35);
+              ctx.rotate(Math.PI/2);
+              ctx.globalAlpha=0.85;
+              ctx.drawImage(img,-dw/2,-dh/2,dw,dh);
+              ctx.restore();
+              ctx.globalAlpha=1;
+            }else{
+              ctx.fillStyle='#666';ctx.fillRect(a.x-22,a.y+10,44,18);
+            }
+          }else{
+            if(img){const scale=a.size/img.height;const dw=img.width*scale;ctx.drawImage(img,a.x-dw/2,a.y,dw,a.size)}
+            else{ctx.fillStyle='#888';ctx.fillRect(a.x-20,a.y,40,a.size)}
+          }
           const nome=a.key.charAt(0).toUpperCase()+a.key.slice(1);
           ctx.font='bold 11px "Palatino Linotype",Georgia,serif';ctx.textAlign='center';
           ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillText(nome,a.x+1,a.y-5);
           ctx.fillStyle='#e8d5a3';ctx.fillText(nome,a.x,a.y-6);
         });
+
         if(lucianBalloon&&lucianBalloon.timer>0){const luc=partyAllies.find(a=>a.key==='lucian');if(luc)drawSpeechBalloon(luc.x,luc.y-8,lucianBalloon.text,'#7ec8ff')}
-        if(lioraBalloon&&lioraBalloon.timer>0){const li=partyAllies.find(a=>a.key==='liora');if(li)drawSpeechBalloon(li.x,li.y-8,lioraBalloon.text,'#ffb0e0')}
+        if(lioraBalloon&&lioraBalloon.timer>0){
+          // balão do Heros no intro usa lioraBalloon no centro
+          if(gameState==='phase2_intro'){
+            drawSpeechBalloon(player.x+player.size/2,player.y-10,lioraBalloon.text,'#e8d5a3');
+          }else{
+            const li=partyAllies.find(a=>a.key==='liora');if(li)drawSpeechBalloon(li.x,li.y-8,lioraBalloon.text,'#ffb0e0');
+          }
+        }
         if(valeriaBalloon&&valeriaBalloon.timer>0){const va=partyAllies.find(a=>a.key==='valeria');if(va)drawSpeechBalloon(va.x,va.y-8,valeriaBalloon.text,'#ffaa66')}
       }
 
@@ -691,6 +727,15 @@
           {speaker:'Valeria',portrait:'valeria',text:'Vamos com tudo até o fim.'},
           {speaker:'Lucian',portrait:'lucian',text:'Você vai cair, bicho feio.'},
           {speaker:'Typhon',portrait:null,text:'Quanta arrogância. Vocês estão diante de um deus, criaturas insignificantes. Mostrarei o terror a vocês, vermes.'}
+        ];
+
+        const phase2Dialogs=[
+          {speaker:'Typhon',portrait:null,text:'Humanos insolentes.'},
+          {speaker:'',portrait:null,text:'Typhon lança uma magia densa e poderosa que destrói a barreira que os amigos de Heros usavam para se proteger. O impacto é tremendo e eles caem no chão, desacordados, já no limite.'},
+          {speaker:'Heros',portrait:'heros',text:'Amigos!'},
+          {speaker:'Typhon',portrait:null,text:'Finalmente eles não atrapalharão mais. Você já está exausto, falso herói. Conseguirá proteger seus amigos queridos?'},
+          {speaker:'Heros',portrait:'heros',text:'Protegerei eles com minha vida, seu maldito. Te desafio a tocar neles. Não permitirei nunca!'},
+          {speaker:'Typhon',portrait:null,text:'Veremos, seu arrogante.'}
         ];
 
       const rescueDialogs=[
@@ -854,12 +899,97 @@
         lucianBalloon=null;
         lioraBalloon={text:'Heros, fique atento ao vento das asas!',timer:190};
         valeriaBalloon={text:'Cuidado! Esse monstro é diferente!',timer:190};
+
+        particles=[];
+        typhonRoarParticles=[];
+        bossProjectiles=[];
+      }
+
+      function startDragonPhase2Intro(){
+        gameState='phase2_intro';
+        phase2IntroTimer=0;
+        friendsDown=true;
+        partyHP=150;
+        partyMaxHP=150;
+        phase2Shot=null;
+        phase2ShotCd=0;
+        setupPartyAllies();
+        // amigos mais embaixo, “caídos”
+        partyAllies.forEach(a=>{a.y=canvas.height-70;a.down=true});
+        player.x=canvas.width/2-player.size/2;
+        player.y=canvas.height*0.55;
+        player.hp=player.maxHp;
+        player.invincible=30;
+        lioraBalloon={text:'Preciso proteger meus amigos. Vou rebater os ataques dele.',timer:360}; // ~6s
+        if(boss){
+          boss.hp=dragonPhaseThreshold;
+          boss.shootCd=9999; // não atira no intro
+        }
+        skipBtn.style.display='none';
+      }
+
+      function startDragonPhase2Combat(){
+        gameState='playing';
+        dragonPhase=2;
+        phase2Shot=null;
+        phase2ShotCd=40; // pequeno delay antes do primeiro tiro
+        skipBtn.style.display='block';
+        lioraBalloon=null;
+
+        particles=[];
+        phase2Shot=null;
       }
 
       function onDragonPhaseEnd(){
-        if(!boss)return;
-        boss.hp=dragonPhaseThreshold;dragonPhase=2;
-        gameState='floor_clear';clearTimer=120;pendingSpecial='dragon_phase2_placeholder';
+        if(!boss||dragonPhase!==1)return;
+        boss.hp=dragonPhaseThreshold;
+        dragonPhase=2;
+        phase2DialogIndex=0;
+        gameState='phase2_dialog';
+        skipBtn.style.display='none';
+        bossProjectiles=[];
+        floorCracks=[];
+        phase2Shot=null;
+        dragonWind=0;
+        dragonWindTimer=0;
+        dragonGrab=0;
+        reflectWindow=0;
+        mouse.left=false;
+        mouse.right=false;
+      }
+
+      function onDragonPhase2End(){
+        if(!boss||dragonPhase!==2)return;
+        boss.hp=dragonPhaseThreshold2;
+        dragonPhase=3;
+        phase3DialogIndex=0;
+        gameState='phase3_dialog';
+        skipBtn.style.display='none';
+        bossProjectiles=[];
+        floorCracks=[];
+        phase2Shot=null;
+        friendsDown=false;
+        reflectWindow=0;
+        mouse.left=false;
+        mouse.right=false;
+      }
+
+      function startDragonPhase3(){
+        gameState='playing';
+        dragonPhase=3;
+        friendsDown=false;
+        phase2Shot=null;
+        setupPartyAllies(); // barreira de volta
+        player.x=canvas.width/2-player.size/2;
+        player.y=canvas.height*0.5;
+        player.hp=player.maxHp;
+        player.invincible=40;
+        if(boss){
+          boss.hp=dragonPhaseThreshold2;
+          boss.shootCd=90;
+        }
+        skipBtn.style.display='block';
+        valeriaBalloon={text:'A barreira voltou! Vamos juntos!',timer:150};
       }
 
       function drawThroneBg(){
@@ -897,7 +1027,7 @@
         if(dragonWind!==0){
           const dir=dragonWind;
           const t=b.anim||0;
-          for(let i=0;i<10;i++){
+          for(let i=0;i<5;i++){
             const wy=b.y+25+i*26+Math.sin(t*0.12+i)*10;
             const wx=dir<0?b.x-15:b.x+b.w+15;
             const alpha=0.3+Math.sin(t*0.18+i*0.4)*0.2;
@@ -930,10 +1060,89 @@
 
      function updateDragon(){
         if(!boss||boss.kind!=='dragon'||boss.hp<=0)return;
-        boss.anim++; // só pra bob e vento, movimento quase zero
+        boss.anim++;
         if(dragonStun>0){dragonStun--;return}
 
-        // troca de modo (intervalos grandes)
+        // ===== FASE 2: proteger amigos =====
+        if(dragonPhase===2){
+          // um ataque por vez
+          if(!phase2Shot&&phase2ShotCd<=0){
+            const pattern=Math.floor(Math.random()*3); // 0 meio, 1 esquerda, 2 direita
+            let tx,ty;
+            if(pattern===0){
+              // meio (entre os amigos / no centro)
+              tx=canvas.width/2;
+              ty=canvas.height-80;
+            }else if(pattern===1){
+              tx=canvas.width*0.22;
+              ty=canvas.height-80;
+            }else{
+              tx=canvas.width*0.78;
+              ty=canvas.height-80;
+            }
+            const sx=boss.x+boss.w/2;
+            const sy=boss.y+boss.h*0.35;
+            const ang=Math.atan2(ty-sy,tx-sx);
+            const spd=3.7; // velocidade considerável
+            phase2Shot={
+              x:sx,y:sy,
+              vx:Math.cos(ang)*spd,
+              vy:Math.sin(ang)*spd,
+              size:18,
+              life:200,
+              targetX:tx,targetY:ty,
+              reflected:false
+            };
+            reflectWindow=999; // pode rebater enquanto a bola existir
+          }
+          if(phase2ShotCd>0)phase2ShotCd--;
+
+          if(phase2Shot){
+            phase2Shot.x+=phase2Shot.vx;
+            phase2Shot.y+=phase2Shot.vy;
+            phase2Shot.life--;
+
+            // se rebatida e acertou o dragão
+            if(phase2Shot.reflected){
+              const bx=boss.x+boss.w/2,by=boss.y+boss.h*0.45;
+              if(Math.hypot(phase2Shot.x-bx,phase2Shot.y-by)<110){
+                boss.hp-=400;
+                for(let k=0;k<8;k++)particles.push({x:bx,y:by,vx:(Math.random()-0.5)*8,vy:(Math.random()-0.5)*8,size:4,life:22,color:'#88ffaa'});
+                phase2Shot=null;
+                phase2ShotCd=50; // só solta outro depois de acertar
+                reflectWindow=0;
+                if(boss.hp<=0){boss.hp=0;onBossDefeated()}
+              }
+            }else{
+              // acertou a zona dos amigos (parte de baixo)
+              if(phase2Shot.y>=canvas.height-100){
+                partyHP-=50;
+                for(let k=0;k<6;k++)particles.push({x:phase2Shot.x,y:phase2Shot.y,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.5)*6,size:3,life:18,color:'#ff4466'});
+                phase2Shot=null;
+                phase2ShotCd=45;
+                reflectWindow=0;
+                if(partyHP<=0){
+                  partyHP=0;
+                  gameState='dead';
+                  createDeathButtons();
+                }
+              }
+            }
+            if(phase2Shot&&phase2Shot.life<=0){
+              phase2Shot=null;
+              phase2ShotCd=40;
+              reflectWindow=0;
+            }
+          }
+
+          // aliados não atiram na fase 2
+          if(lucianBalloon){lucianBalloon.timer--;if(lucianBalloon.timer<=0)lucianBalloon=null}
+          if(lioraBalloon){lioraBalloon.timer--;if(lioraBalloon.timer<=0)lioraBalloon=null}
+          if(valeriaBalloon){valeriaBalloon.timer--;if(valeriaBalloon.timer<=0)valeriaBalloon=null}
+          return;
+        }
+
+        // ===== FASE 1 (igual antes) =====
         dragonModeTimer--;
         if(dragonModeTimer<=0){
           dragonMode=['both','sword','magic'][Math.floor(Math.random()*3)];
@@ -942,7 +1151,6 @@
           else if(dragonMode==='magic')valeriaBalloon={text:'Use magia! A espada não corta!',timer:140};
         }
 
-        // vento (intervalo grande)
         boss.windCd=Math.max(0,(boss.windCd||0)-1);
         if(boss.windCd<=0&&Math.random()<0.0045){
           dragonWind=Math.random()<0.5?-1:1;
@@ -956,7 +1164,6 @@
           if(dragonWindTimer<=0)dragonWind=0;
         }
 
-        // rachaduras (mais raras, menos dano)
         boss.crackCd=Math.max(0,(boss.crackCd||0)-1);
         if(boss.crackCd<=0&&floorCracks.length<3&&Math.random()<0.006){
           floorCracks.push({
@@ -975,12 +1182,11 @@
           if(c.life<=0)floorCracks.splice(i,1);
         }
 
-        // grab (bem raro)
         boss.grabCd=Math.max(0,(boss.grabCd||0)-1);
         if(dragonGrab<=0&&boss.grabCd<=0&&Math.random()<0.0028){
           if(Math.hypot(player.x+player.size/2-(boss.x+boss.w/2),player.y+player.size/2-(boss.y+boss.h*0.55))<155){
             dragonGrab=150;dragonGrabMash=0;boss.grabCd=420;
-            valeriaBalloon={text:'Heros! Ataca rápido pra se soltar!',timer:130};
+            valeriaBalloon={text:'Heros! Ataca rápido pra se soltar!',timer:160};
           }
         }
         if(dragonGrab>0){
@@ -990,21 +1196,20 @@
           if(player.hp<=0){player.hp=0;gameState='dead';createDeathButtons()}
         }
 
-        // projéteis (intervalo maior, dano menor)
         boss.shootCd=Math.max(0,(boss.shootCd||0)-1);
         if(boss.shootCd<=0){
           boss.shootCd=110+Math.random()*55;
           const ang=Math.atan2(player.y+player.size/2-(boss.y+boss.h*0.4),player.x+player.size/2-(boss.x+boss.w/2));
+
           for(let i=-1;i<=1;i++){
             bossProjectiles.push({
               type:'ember',x:boss.x+boss.w/2,y:boss.y+boss.h*0.32,
-              vx:Math.cos(ang+i*0.2)*3.4,vy:Math.sin(ang+i*0.2)*3.4,
-              size:11,life:115,dmg:8
+              vx:Math.cos(ang+i*0.2)*3.6,vy:Math.sin(ang+i*0.2)*3.6,
+              size:11,life:220,dmg:8  // life maior = chega no player/barreira
             });
           }
         }
 
-        // rebate (raro)
         boss.reflectCd=Math.max(0,(boss.reflectCd||0)-1);
         if(boss.reflectCd<=0&&Math.random()<0.0035){
           boss.reflectCd=580+Math.random()*140;
@@ -1018,7 +1223,6 @@
           lioraBalloon={text:'Heros! Rebata essa magia!',timer:145};
         }
 
-        // aliados
         allyShootTimer--;
         if(allyShootTimer<=0){
           allyShootTimer=600;
@@ -1102,8 +1306,29 @@
           const c=fireClones[i];
           if(Math.hypot(c.x-ax,c.y-ay)<swordHit+20){fireClones.splice(i,1);for(let k=0;k<8;k++)particles.push({x:c.x,y:c.y,vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*5,size:3,life:18,color:'#ff6600'})}
         }
+
         // REBATE mais generoso
         if(reflectWindow>0){
+
+            // rebate da fase 2
+          // REBATE FASE 2 — sempre ativo quando a bola existe (não depende de reflectWindow)
+          if(dragonPhase===2&&phase2Shot&&!phase2Shot.reflected&&boss){
+            const px=player.x+player.size/2;
+            const py=player.y+player.size/2;
+            const dist=Math.hypot(phase2Shot.x-px,phase2Shot.y-py);
+            // área grande e confiável
+            if(dist<swordHit+95){
+              phase2Shot.reflected=true;
+              phase2Shot.life=200;
+              const tx=boss.x+boss.w/2;
+              const ty=boss.y+boss.h*0.4;
+              const d=Math.hypot(tx-phase2Shot.x,ty-phase2Shot.y)||1;
+              phase2Shot.vx=(tx-phase2Shot.x)/d*10;
+              phase2Shot.vy=(ty-phase2Shot.y)/d*10;
+              for(let k=0;k<8;k++)particles.push({x:phase2Shot.x,y:phase2Shot.y,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.5)*6,size:3,life:18,color:'#88ffaa'});
+            }
+          }
+
           for(let i=bossProjectiles.length-1;i>=0;i--){
             const p=bossProjectiles[i];
             if(p.type==='reflectable'&&!p.reflected){
@@ -1352,6 +1577,14 @@
           return;
         }
 
+        if(gameState==='phase2_dialog'){
+          phase2DialogIndex++;
+          if(phase2DialogIndex>=phase2Dialogs.length){
+            startDragonPhase2Intro();
+          }
+          return;
+        }
+
         if(gameState==='rescue'){
           if(rescueStep<4)return;
           if(rescueStep===4){
@@ -1385,7 +1618,7 @@
         if(gameState==='floor_transition'){if(hitButton(mx,my,transitionBtn))applyNextFloor();return}
         if(gameState==='floor_clear')return;
 
-        if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','victory'].includes(gameState)){onAdvance();return}
+        if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','phase2_dialog','victory'].includes(gameState)){onAdvance();return}
 
         if(gameState==='playing'&&!isPaused){if(e.button===0)mouse.left=true;if(e.button===2)mouse.right=true}
       });
@@ -1411,7 +1644,7 @@
         if(gameState==='floor_transition'){if(hitButton(mx,my,transitionBtn))applyNextFloor();return}
         if(gameState==='floor_clear')return;
 
-        if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','victory'].includes(gameState)){onAdvance();return}
+        if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','phase2_dialog','victory'].includes(gameState)){onAdvance();return}
 
         if(gameState!=='playing'||isPaused)return;
         const joyR=joyZone.getBoundingClientRect(),fireR=document.getElementById('fireBtn').getBoundingClientRect(),pauseR=document.getElementById('pauseBtn').getBoundingClientRect();
@@ -1702,9 +1935,12 @@
             p.vx+=Math.cos(ang)*0.12;p.vy+=Math.sin(ang)*0.12;
             const sp=Math.sqrt(p.vx*p.vx+p.vy*p.vy);if(sp>2.4){p.vx=p.vx/sp*2.4;p.vy=p.vy/sp*2.4}
             p.x+=p.vx;p.y+=p.vy;p.life--;
+
             if(!p.trail)p.trail=[];p.trail.push({x:p.x,y:p.y,life:20});if(p.trail.length>18)p.trail.shift();p.trail.forEach(t=>t.life--);
+
             if(Math.hypot(p.x-tx,p.y-ty)<player.size/2+p.size){
               p.hit=true;p.life=0;player.hp=20;player.invincible=50;
+
               if(boss){boss.phase=1;boss.phaseTimer=0}
               for(let k=0;k<30;k++)particles.push({x:p.x,y:p.y,vx:(Math.random()-0.5)*7,vy:(Math.random()-0.5)*7,size:3+Math.random()*4,life:25,color:'#b060ff'});
             }
@@ -1728,14 +1964,17 @@
           }else if(p.type==='bounce'||p.type==='wave'||p.type==='ember'||p.type==='meteor'||p.type==='orb'||p.type==='bolt'){
             p.x+=p.vx;p.y+=p.vy;p.life--;
             if(p.type==='bounce'&&p.bounces>0&&(p.y>canvas.height-80||p.y<20)){p.vy*=-0.85;p.bounces--}
-            if(p.y>=barrierY&&(p.type==='bolt'||p.type==='orb'||p.type==='ember'||p.type==='meteor')){
-              p.life=0;
-              for(let k=0;k<8;k++)particles.push({x:p.x,y:barrierY,vx:(Math.random()-0.5)*4,vy:-1-Math.random()*2,size:2,life:14,color:p.type==='bolt'?'#90d0ff':'#ff6600'});
-              continue;
-            }
-            if(player.invincible<=0&&Math.hypot(p.x-(player.x+player.size/2),p.y-(player.y+player.size/2))<player.size/2+p.size){
+
+           // 1) acerta o player primeiro
+            if(player.invincible<=0&&Math.hypot(p.x-(player.x+player.size/2),p.y-(player.y+player.size/2))<player.size/2+p.size+6){
               player.hp-=(p.dmg||11);player.invincible=34;heat=Math.min(heatMax,heat+5);p.life=0;
               if(player.hp<=0){player.hp=0;gameState='dead';createDeathButtons()}
+              continue;
+            }
+            // 2) só depois a barreira absorve
+            if(p.y>=barrierY&&(p.type==='bolt'||p.type==='orb'||p.type==='ember'||p.type==='meteor')){
+              p.life=0;
+              continue;
             }
           }else if(p.type==='ally'){
             // SEGUIR o boss (homing garantido)
@@ -1792,7 +2031,13 @@
           if(rescueTimer>120){rescueStep=3;rescueTimer=0;dialogFade=0}
         }else if(rescueStep===3){dialogFade=Math.min(1,dialogFade+0.025);if(dialogFade>=1&&rescueTimer>20)rescueStep=4}
         else if(rescueStep===5){for(let i=healParticles.length-1;i>=0;i--){const p=healParticles[i];p.x+=p.vx;p.y+=p.vy;p.life--;p.size*=0.985;if(p.life<=0)healParticles.splice(i,1)}}
-        for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vx*=0.97;p.vy*=0.97;p.life--;p.size*=0.98;if(p.life<=0||p.size<0.4)particles.splice(i,1)}
+        // limita pra não travar (particulas)
+        if(particles.length>100)particles.splice(0,particles.length-100);
+        for(let i=particles.length-1;i>=0;i--){
+          const p=particles[i];
+          p.x+=p.vx;p.y+=p.vy;p.vx*=0.97;p.vy*=0.97;p.life--;p.size*=0.98;
+          if(p.life<=0||p.size<0.4)particles.splice(i,1);
+        }
       }
 
       function drawFriendSprite(actor){
@@ -1877,9 +2122,18 @@
             return;
           }
 
+          if(gameState==='phase2_intro'){
+            phase2IntroTimer++;
+            if(lioraBalloon){lioraBalloon.timer--;if(lioraBalloon.timer<=0)lioraBalloon=null}
+            if(phase2IntroTimer>=360){ // 6 segundos
+              startDragonPhase2Combat();
+            }
+            return;
+          }
+
         if(gameState==='rescue'){updateRescue();return}
 
-        if(['post10','post50','post60','post80','post93','post96','pre_rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','menu'].includes(gameState))return;
+        if(['post10','post50','post60','post80','post93','post96','pre_rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','phase2_dialog','menu'].includes(gameState))return;
 
         if(gameState!=='playing'||isPaused)return;
 
@@ -2169,6 +2423,29 @@
               return;
             }
 
+          if(gameState==='phase2_dialog'){
+            const d=phase2Dialogs[Math.min(phase2DialogIndex,phase2Dialogs.length-1)];
+            if(!d)return;
+            if(isNarration(d)){drawNarrationScreen(d.text);return}
+            if(d.speaker==='Typhon'){
+              drawThroneBg();
+              if(boss)drawDragon(boss);
+              drawDialogBox(d.speaker,d.text,null);
+            }else{
+              drawThroneBg();
+              drawDialogBox(d.speaker,d.text,d.portrait);
+            }
+            return;
+          }
+
+          if(gameState==='phase2_intro'){
+            drawThroneBg();
+            if(boss)drawDragon(boss);
+            drawPartyAllies();
+            if(player)drawPlayer();
+            return;
+          }
+
           if(gameState==='post10'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);if(post10Step===0)drawDialogBox('Heros','Os monstros ficam mais fortes a cada andar. Já estou há algumas horas aqui dentro. Vou descansar mais um pouco e avançar.','heros');else if(post10Step===1){ctx.fillStyle='#e8d5a3';ctx.font='bold 28px Georgia,serif';ctx.textAlign='center';ctx.fillText('A cada andar você fica mais forte e habilidoso.',w/2,h/2)}else{ctx.fillStyle='#e8d5a3';ctx.font='bold 32px Georgia,serif';ctx.textAlign='center';ctx.fillText('Andar limpo',w/2,h/2-20);ctx.font='20px Georgia,serif';ctx.fillStyle='#fff';ctx.fillText('Você descansa um pouco e avança.',w/2,h/2+25)}return}
 
           if(gameState==='post50'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);drawDialogBox('Heros','Já estou quase dois dias aqui. Está ficando muito difícil. Tenho que descansar mais tempo antes de subir um andar. Já sofri alguns ferimentos. Por sorte, quando limpo um andar ele fica vazio, então consigo dormir, comer e descansar. Nos últimos andares eu tive que usar mais estratégia. Sei que vai piorar. Vou descansar mais, fazer uns curativos e avançar. Não posso parar. E não vou.','heros');return}
@@ -2221,6 +2498,19 @@
 
             drawBossProjectiles();
 
+            // bola da fase 2
+            if(phase2Shot){
+              const p=phase2Shot;
+              const col=p.reflected?'#88ffaa':'#ff66ee';
+              const g=ctx.createRadialGradient(p.x,p.y,2,p.x,p.y,p.size*1.8);
+              g.addColorStop(0,'#ffffff');g.addColorStop(0.35,col);g.addColorStop(1,'rgba(0,0,0,0)');
+              ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,p.size*1.8,0,Math.PI*2);ctx.fill();
+              if(!p.reflected){
+                ctx.fillStyle='rgba(255,255,120,0.95)';ctx.font='bold 14px Arial';ctx.textAlign='center';
+                ctx.fillText('REBATA!',p.x,p.y-p.size-14);
+              }
+            }
+
             if(gameState==='playing'){
               enemies.forEach(e=>{
                 if(!e.alive)return;
@@ -2252,6 +2542,16 @@
               ctx.fillText(`HP: ${Math.ceil(player.hp)}/${player.maxHp}`,20+95,18+11);
               ctx.textAlign='left';ctx.textBaseline='alphabetic';
               ctx.fillStyle='#ffcc00';ctx.font='16px Arial';ctx.fillText(getTheme().name,20,56);
+
+              if(dragonPhase===2&&friendsDown){
+                ctx.fillStyle='#222';ctx.fillRect(20,95,190,16);
+                ctx.fillStyle=partyHP>50?'#66aaff':'#ff4455';
+                ctx.fillRect(20,95,190*(partyHP/partyMaxHP),16);
+                ctx.strokeStyle='#aac';ctx.lineWidth=1;ctx.strokeRect(20,95,190,16);
+                ctx.fillStyle='#cce';ctx.font='12px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
+                ctx.fillText(`Amigos: ${Math.max(0,Math.ceil(partyHP))}/${partyMaxHP}`,20+95,95+8);
+                ctx.textAlign='left';ctx.textBaseline='alphabetic';
+              }
 
               if(killsNeeded>0)ctx.fillText(`Kills: ${kills}/${killsNeeded}  |  Total: ${totalKills}`,20,78);
               else ctx.fillText(`Total: ${totalKills}`,20,78);
@@ -2301,6 +2601,7 @@
         gameState='title';titleAlpha=1;titleTimer=0;dialogIndex=0;
         gameLoop();
       });
+
    </script>
  </body>
 </html>
