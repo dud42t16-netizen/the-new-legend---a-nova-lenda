@@ -218,6 +218,7 @@
       let typhonRoarParticles=[];
       let roarAudio=null;
       let bossFallText=''; // texto da tela preta de 3s (Tempestas/Ignis/Typhon)
+      let finalDialogIndex=0;
 
       const player={x:0,y:0,size:48,speed:3.8,baseSpeed:3.8,hp:10,maxHp:10,angle:Math.PI/2,dir:'baixo',state:'parado',frame:0,frameTimer:0,attackCooldown:0,fireCooldown:0,slashTimer:0,invincible:0};
       let enemies=[],fireballs=[],enemyShots=[],particles=[],deathButtons=[];
@@ -762,7 +763,39 @@
         {speaker:'Heros',portrait:'heros',text:'Cale-se, lagarto de asas. Você vai cair!'}
       ];
 
-
+      const finalDialogs=[
+        {speaker:'',portrait:null,text:'A longa batalha final tinha finalmente acabado. Porém isso não te trouxe alívio. Exausto e ferido, com a visão meio turva, você vê o rei dos monstros caindo morto à sua frente, dizendo suas últimas palavras...'},
+        {speaker:'Typhon',portrait:null,text:'Impossível... derrotado por um humano? Só podia ser descendente daquele maldito herói... Você ainda tem com o que se preocupar, pequeno herói. Seus amigos estão morrendo... hahaha. Você conseguirá salvá-los? Haha...'},
+        {speaker:'',portrait:null,text:'Typhon, com dificuldade, termina suas últimas palavras e cai. Você olha para Liora e Valeria caindo desacordadas.'},
+        {speaker:'Heros',portrait:'heros',text:'Meus... amigos. Vou tirar vocês daqui.'},
+        {speaker:'',portrait:null,text:'Você checa o estado de seus amigos. Estavam em estado grave, principalmente Lucian, já com a respiração fraca. Você fica assustado e tenta manter a calma.'},
+        {speaker:'Heros',portrait:'heros',text:'Amigos... aguentem, por favor!'},
+        {speaker:'',portrait:null,text:'Você corta uma das asas de Typhon e coloca seus amigos com cuidado em cima dela. Parte apressado, descendo os andares da torre. Já estava exausto, mas não podia parar.'},
+        {speaker:'Heros',portrait:'heros',text:'Aguentem... aguentem...'},
+        {speaker:'',portrait:null,text:'No andar 50, já sem forças, você cai de joelhos. Exausto de todas as batalhas intensas seguidas, se arrasta com dificuldade puxando seus amigos. Sem conseguir enxergar direito, escuta uma voz familiar. A pessoa à sua frente te cura com magia, o bastante para você resistir à exaustão. Quando a visão melhora, você olha para cima.'},
+        {speaker:'Mago Ancião',portrait:'mago-anciao',text:'Olá, Heros. Sabia que conseguiria, meu rapaz.'},
+        {speaker:'Heros',portrait:'heros',text:'Mago ancião?'},
+        {speaker:'Mago Ancião',portrait:'mago-anciao',text:'Me ouça com atenção. Não temos tempo. Seus amigos estão em estado grave. Eu não te curei de forma decente para guardar magia.'},
+        {speaker:'Mago Ancião',portrait:'mago-anciao',text:'Escute, Heros. Você é nosso novo herói. O antigo herói — seu bisavô e meu antigo amigo — sabia que não seria o suficiente para trazer a paz ao mundo. Então confiou o destino de todos à linhagem dele, esperando o momento certo.'},
+        {speaker:'Mago Ancião',portrait:'mago-anciao',text:'Eu sempre estive com seus avós e seus pais. Quando você nasceu, sabíamos que era o escolhido, aquele que traria a paz. Infelizmente não consegui salvar seu vilarejo... mas não deixarei que sofra mais.'},
+        {speaker:'Mago Ancião',portrait:'mago-anciao',text:'Na minha casa, em meu quarto, tem um diário sobre a minha cama. Lá está toda a sua história e as respostas para suas perguntas. Agora não temos tempo.'},
+        {speaker:'Mago Ancião',portrait:'mago-anciao',text:'Não deixarei que sofra mais. Salvarei Lucian com minha magia. Darei toda a minha força vital e magia a ele. Então ele conseguirá curar suas amigas. A magia dele é forte... mais que a minha.'},
+        {speaker:'Heros',portrait:'heros',text:'Espere, mago ancião... se fizer isso...'},
+        {speaker:'Mago Ancião',portrait:'mago-anciao',text:'Não se preocupe, Heros. Já não tenho mais muito tempo de vida. Sou bem mais velho do que pareço. Agora adeus, meu rapaz. Se cuide, nossa nova lenda. Obrigado por tudo.'},
+        {speaker:'Mago Ancião',portrait:'mago-anciao',text:'E adeus... de novo eu digo: foi uma honra acompanhar o crescimento do maior herói que já tivemos. A humanidade te espera lá fora. Vá.'},
+        {speaker:'Heros',portrait:'heros',text:'Eu não seria nada sem meus amigos. Obrigado... muito obrigado, ancião. Por tudo. Adeus, companheiro. Foi uma enorme honra.'},
+        {speaker:'',portrait:null,text:'O mago ancião se desfaz, consumido pela magia. Lucian acorda meio confuso, mas quase 100%.'},
+        {speaker:'Lucian',portrait:'lucian',text:'Heros? O que aconteceu?'},
+        {speaker:'Heros',portrait:'heros',text:'Cof... cof... Lucian, rápido... cure as meninas.'},
+        {speaker:'',portrait:null,text:'Lucian cura Liora e Valeria. Todos, após se recomporem, descem a torre emocionados e felizes por estarem juntos de novo, por estarem vivos, e principalmente porque o mundo finalmente está em paz. Enquanto descem, Heros conta sobre o ancião e sobre sua origem e linhagem heroica.'},
+        {speaker:'',portrait:null,text:'Quando saem da torre, são recebidos como verdadeiros heróis pelos que se reuniram pelo plano anterior. Graças a você e seus amigos, nenhum deles precisou fazer nada.'},
+        {speaker:'',portrait:null,text:'Depois de muito tempo comemorando e sendo exaltados, você e seus amigos vão à casa do mago ancião. Você pega o diário que ele havia falado.'},
+        {speaker:'',portrait:null,text:'Enquanto sobem uma colina com uma paisagem linda e aconchegante, você lê o diário junto de seus amigos. Inúmeras informações. Vocês se sentem ainda mais gratos ao mago ancião.'},
+        {speaker:'',portrait:null,text:'Quando chegam ao lugar desejado, com a linda vista, fazem uma lápide em memória ao salvador de vocês. Depois de agradecer e prestar as homenagens, caminham de volta para a cidade... rindo e juntos.'},
+        {speaker:'',portrait:null,text:'Os nomes de todos foram escritos nos livros. Estátuas foram feitas sobre vocês. Todos agradeceram pela tão esperada paz.'},
+        {speaker:'',portrait:null,text:'E nos livros de história estava o seu nome.'},
+        {speaker:'',portrait:null,text:'Heros, a nova lenda.'}
+      ];
 
       const rescueDialogs=[
         {speaker:'',portrait:null,text:'Seus amigos vieram ao seu resgate. Em lágrimas, eles te salvaram.'},
@@ -1526,9 +1559,11 @@
           phase3DialogIndex=0;gameState='phase3_dialog';skipBtn.style.display='none';
           return;
         }
+        
         if(pendingSpecial==='after_typhon_final'){
           pendingSpecial=null;bossFallText='';
-          gameState='victory';
+          finalDialogIndex=0;
+          gameState='final_dialog';
           skipBtn.style.display='none';
           return;
         }
@@ -1717,6 +1752,15 @@
           return;
         }
 
+        if(gameState==='final_dialog'){
+          finalDialogIndex++;
+          if(finalDialogIndex>=finalDialogs.length){
+            gameState='victory';
+            skipBtn.style.display='none';
+          }
+          return;
+        }
+
         if(gameState==='rescue'){
           if(rescueStep<4)return;
           if(rescueStep===4){
@@ -1750,7 +1794,7 @@
         if(gameState==='floor_transition'){if(hitButton(mx,my,transitionBtn))applyNextFloor();return}
         if(gameState==='floor_clear')return;
 
-        if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','phase2_dialog','phase3_dialog','victory'].includes(gameState)){onAdvance();return}
+        if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','phase2_dialog','phase3_dialog','final_dialog','victory'].includes(gameState)){onAdvance();return}
 
         if(gameState==='playing'&&!isPaused){if(e.button===0)mouse.left=true;if(e.button===2)mouse.right=true}
       });
@@ -1776,7 +1820,7 @@
         if(gameState==='floor_transition'){if(hitButton(mx,my,transitionBtn))applyNextFloor();return}
         if(gameState==='floor_clear')return;
 
-        if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','phase2_dialog','phase3_dialog','victory'].includes(gameState)){onAdvance();return}
+        if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','phase2_dialog','phase3_dialog','final_dialog','victory'].includes(gameState)){onAdvance();return}
 
         if(gameState!=='playing'||isPaused)return;
         const joyR=joyZone.getBoundingClientRect(),fireR=document.getElementById('fireBtn').getBoundingClientRect(),pauseR=document.getElementById('pauseBtn').getBoundingClientRect();
@@ -2261,7 +2305,7 @@
 
         if(gameState==='rescue'){updateRescue();return}
 
-        if(['post10','post50','post60','post80','post93','post96','pre_rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','phase2_dialog','phase3_dialog','menu'].includes(gameState))return;
+        if(['post10','post50','post60','post80','post93','post96','pre_rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','phase2_dialog','phase3_dialog','final_dialog','menu'].includes(gameState))return;
 
         if(gameState!=='playing'||isPaused)return;
 
@@ -2599,6 +2643,15 @@
               drawThroneBg();
               drawDialogBox(d.speaker,d.text,d.portrait);
             }
+            return;
+          }
+
+          if(gameState==='final_dialog'){
+            const d=finalDialogs[Math.min(finalDialogIndex,finalDialogs.length-1)];
+            if(!d)return;
+            if(isNarration(d)){drawNarrationScreen(d.text);return}
+            drawThroneBg();
+            drawDialogBox(d.speaker,d.text,d.portrait);
             return;
           }
 
