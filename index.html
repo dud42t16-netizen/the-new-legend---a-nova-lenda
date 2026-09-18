@@ -2,29 +2,29 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>The New Legend</title>
 <style>
 
-  *{margin:0;padding:0;box-sizing:border-box;touch-action:none;user-select:none}
+  *{margin:0;padding:0;box-sizing:border-box;touch-action:none;user-select:none;-webkit-tap-highlight-color:transparent}
 
-  body{background:#000;overflow:hidden;width:100vw;height:100vh}
+  html,body{background:#000;overflow:hidden;width:100%;height:100%;position:fixed;left:0;top:0}
 
-  canvas{display:block;position:absolute;top:0;left:0}
+  canvas{display:block;position:fixed;top:0;left:0;width:100%;height:100%}
 
-  #mobileControls{display:none;position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}
+  #mobileControls{display:none;position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}
 
-  #joystickZone{position:absolute;bottom:25px;left:25px;width:110px;height:110px;pointer-events:auto}
+  #joystickZone{position:absolute;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:calc(16px + env(safe-area-inset-left,0px));width:100px;height:100px;pointer-events:auto}
 
-  #joystickBase{width:110px;height:110px;background:rgba(255,255,255,0.11);border:2px solid rgba(255,255,255,0.22);border-radius:50%;position:absolute}
+  #joystickBase{width:100px;height:100px;background:rgba(255,255,255,0.11);border:2px solid rgba(255,255,255,0.22);border-radius:50%;position:absolute}
 
-  #joystickKnob{width:50px;height:50px;background:rgba(255,255,255,0.32);border-radius:50%;position:absolute;top:30px;left:30px}
+  #joystickKnob{width:46px;height:46px;background:rgba(255,255,255,0.32);border-radius:50%;position:absolute;top:27px;left:27px}
 
-  #fireBtn{position:absolute;bottom:35px;right:25px;width:68px;height:68px;background:rgba(255,80,0,0.32);border:2px solid rgba(255,150,50,0.55);border-radius:50%;pointer-events:auto;display:flex;align-items:center;justify-content:center;color:#ffcc88;font-size:12px;font-weight:bold}
+  #fireBtn{position:absolute;bottom:calc(28px + env(safe-area-inset-bottom,0px));right:calc(16px + env(safe-area-inset-right,0px));width:64px;height:64px;background:rgba(255,80,0,0.32);border:2px solid rgba(255,150,50,0.55);border-radius:50%;pointer-events:auto;display:flex;align-items:center;justify-content:center;color:#ffcc88;font-size:12px;font-weight:bold}
 
-  #pauseBtn{position:absolute;top:15px;right:15px;width:42px;height:42px;background:rgba(0,0,0,0.45);border:2px solid rgba(255,255,255,0.35);border-radius:10px;pointer-events:auto;display:flex;align-items:center;justify-content:center;color:white;font-size:16px;z-index:20}
+  #pauseBtn{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));width:40px;height:40px;background:rgba(0,0,0,0.45);border:2px solid rgba(255,255,255,0.35);border-radius:10px;pointer-events:auto;display:flex;align-items:center;justify-content:center;color:white;font-size:15px;z-index:20}
 
-  #skipBtn{position:absolute;top:15px;right:65px;padding:8px 12px;background:rgba(180,40,40,0.75);border:2px solid #ff6666;border-radius:8px;color:#fff;font-size:13px;font-weight:bold;pointer-events:auto;z-index:25;display:none}
+  #skipBtn{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:calc(58px + env(safe-area-inset-right,0px));padding:8px 12px;background:rgba(180,40,40,0.75);border:2px solid #ff6666;border-radius:8px;color:#fff;font-size:13px;font-weight:bold;pointer-events:auto;z-index:25;display:none}
 
 </style>
 </head>
@@ -40,8 +40,16 @@
       const canvas=document.getElementById('gameCanvas');
       const ctx=canvas.getContext('2d');
 
-      function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
-      resizeCanvas();window.addEventListener('resize',resizeCanvas);
+      function resizeCanvas(){
+        const vw=window.visualViewport?window.visualViewport.width:window.innerWidth;
+        const vh=window.visualViewport?window.visualViewport.height:window.innerHeight;
+        canvas.width=Math.floor(vw);
+        canvas.height=Math.floor(vh);
+      }
+      resizeCanvas();
+      window.addEventListener('resize',resizeCanvas);
+      if(window.visualViewport)window.visualViewport.addEventListener('resize',resizeCanvas);
+
       const isMobile=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
       if(isMobile)document.getElementById('mobileControls').style.display='block';
 
@@ -117,6 +125,18 @@
           a.volume=BGM_VOL[n]||0.3;
           bgmTracks[n]=a;
         }
+
+        // SFX combate
+        sfxSwordPool=[];
+        for(let i=0;i<3;i++){
+          const s=new Audio(SPRITE_PATH+'sword.wav');
+          s.preload='auto';
+          s.volume=0.45;
+          sfxSwordPool.push(s);
+        }
+        sfxFire=new Audio(SPRITE_PATH+'fire.mp3');
+        sfxFire.preload='auto';
+        sfxFire.volume=0.4;
       }
 
             function stopBgm(){
@@ -182,6 +202,27 @@
         }
 
         if(['title','menu','dead'].includes(gameState))stopBgm();
+      }
+
+      function playSwordSfx(){
+        const s=sfxSwordPool.find(a=>a.paused||a.ended)||sfxSwordPool[0];
+        if(!s)return;
+        try{s.currentTime=0;s.play().catch(()=>{})}catch(e){}
+      }
+
+      function playFireSfx(){
+        if(!sfxFire)return;
+        if(sfxFireTimer){clearTimeout(sfxFireTimer);sfxFireTimer=null}
+        try{
+          sfxFire.pause();
+          sfxFire.currentTime=0;
+          sfxFire.play().catch(()=>{});
+          // toca só 2 segundos
+          sfxFireTimer=setTimeout(()=>{
+            try{sfxFire.pause();sfxFire.currentTime=0}catch(e){}
+            sfxFireTimer=null;
+          },2000);
+        }catch(e){}
       }
 
       const animConfig={
@@ -340,6 +381,10 @@
         towntheme:0.40
       };
 
+      let sfxSwordPool=[];
+      let sfxFire=null;
+      let sfxFireTimer=null;
+
       const player={x:0,y:0,size:48,speed:3.8,baseSpeed:3.8,hp:10,maxHp:10,angle:Math.PI/2,dir:'baixo',state:'parado',frame:0,frameTimer:0,attackCooldown:0,fireCooldown:0,slashTimer:0,invincible:0};
       let enemies=[],fireballs=[],enemyShots=[],particles=[],deathButtons=[];
       const keys={};let mouse={left:false,right:false};
@@ -347,6 +392,18 @@
       const joyKnob=document.getElementById('joystickKnob');
       const joyZone=document.getElementById('joystickZone');
       const skipBtn=document.getElementById('skipBtn');
+
+      function syncMobileControls(){
+        if(!isMobile)return;
+        const show=gameState==='playing'&&!isPaused;
+        const joy=document.getElementById('joystickZone');
+        const fire=document.getElementById('fireBtn');
+        const pause=document.getElementById('pauseBtn');
+        if(joy)joy.style.display=show?'block':'none';
+        if(fire)fire.style.display=show?'flex':'none';
+        // pause só no combate também (opcional; se quiser pause em tudo, tire esta linha)
+        if(pause)pause.style.display=show?'flex':'none';
+      }
 
       function currentFloorData(){return floors[floorOrder[floorIndex]]}
 
@@ -1575,13 +1632,15 @@
         const angles=tripleFire?[base-0.28,base,base+0.28]:[base];
         const extra=damageBuff>0?2:0;
         angles.forEach(a=>{fireballs.push({x:player.x+player.size/2,y:player.y+player.size/2,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed,size:13,life:85,dmg:fireDmg+extra})});
-        player.fireCooldown=28;
+        // cooldown = 2 segundos (~120 frames a 60fps) = duração do áudio fire
+        player.fireCooldown=120;
+        playFireSfx();
       }
 
       function swordAttack(){
 
         if(player.attackCooldown>0||player.state==='ataque'||isPaused)return;
-        player.state='ataque';player.frame=0;player.frameTimer=0;player.attackCooldown=22;player.slashTimer=16;
+        player.state='ataque';player.frame=0;player.frameTimer=0;player.attackCooldown=22;player.slashTimer=16;          playSwordSfx();
         if(dragonGrab>0){dragonGrabMash+=8;player.attackCooldown=8;return}
         if(boss&&boss.kind==='dragon'&&dragonMode==='magic')return;
 
@@ -2433,6 +2492,7 @@
       function update(){
 
         updateBgm();
+        syncMobileControls();
 
         if(gameState==='title'){titleTimer++;if(titleTimer>90){titleAlpha-=0.012;if(titleAlpha<=0){titleAlpha=0;hasSave=checkSaveExists();gameState='menu';setupMenuButtons()}}return}
 
@@ -2664,7 +2724,21 @@
 
       function draw(){
           const w=canvas.width,h=canvas.height;
-          if(gameState==='title'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.globalAlpha=titleAlpha;ctx.fillStyle='#e8d5a3';ctx.font='bold 48px Georgia,serif';ctx.textAlign='center';ctx.fillText('THE NEW LEGEND',w/2,h/2);ctx.globalAlpha=1;return}
+          if(gameState==='title'){
+            ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);
+            ctx.globalAlpha=titleAlpha;
+            ctx.fillStyle='#e8d5a3';
+            ctx.font='bold 48px Georgia,serif';
+            ctx.textAlign='center';
+            ctx.fillText('THE NEW LEGEND',w/2,h/2);
+            // versão em português, menor, bem embaixo
+            ctx.font='18px Georgia,serif';
+            ctx.fillStyle='rgba(232,213,163,0.75)';
+            ctx.fillText('A Nova Lenda',w/2,h*0.88);
+            ctx.globalAlpha=1;
+            return;
+          }
+
           if(gameState==='menu'){drawMenu();return}
 
           if(gameState==='floor_clear'){
@@ -2852,7 +2926,54 @@
             return;
           }
 
-          if(gameState==='victory'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.fillStyle='#ffd700';ctx.font='bold 32px Georgia,serif';ctx.textAlign='center';ctx.fillText('Juntos até o fim',w/2,h/2-40);ctx.fillStyle='#fff';ctx.font='18px Georgia,serif';ctx.fillText('Heros e seus amigos seguem adiante.',w/2,h/2+10);ctx.fillText('Toque para voltar ao menu',w/2,h/2+50);return}
+          if(gameState==='victory'){
+            ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);
+
+            // brilho suave no centro
+            const g=ctx.createRadialGradient(w/2,h*0.42,10,w/2,h*0.42,Math.min(w,h)*0.45);
+            g.addColorStop(0,'rgba(201,162,39,0.18)');
+            g.addColorStop(0.5,'rgba(80,50,10,0.08)');
+            g.addColorStop(1,'rgba(0,0,0,0)');
+            ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+
+            // linha decorativa
+            ctx.strokeStyle='rgba(201,162,39,0.55)';
+            ctx.lineWidth=2;
+            ctx.beginPath();
+            ctx.moveTo(w*0.25,h*0.28);
+            ctx.lineTo(w*0.75,h*0.28);
+            ctx.stroke();
+
+            ctx.fillStyle='#ffd700';
+            ctx.font='bold 36px Georgia,serif';
+            ctx.textAlign='center';
+            ctx.fillText('A Nova Lenda',w/2,h*0.36);
+
+            ctx.fillStyle='#e8d5a3';
+            ctx.font='bold 22px Georgia,serif';
+            ctx.fillText('Juntos até o fim',w/2,h*0.44);
+
+            ctx.fillStyle='#ffffff';
+            ctx.font='16px Georgia,serif';
+            ctx.fillText('Heros e seus amigos trouxeram a paz.',w/2,h*0.52);
+            ctx.fillText('O selo foi selado. O mundo pode respirar.',w/2,h*0.56);
+
+            ctx.fillStyle='#c9a227';
+            ctx.font='italic 17px Georgia,serif';
+            ctx.fillText('Obrigado por jogar.',w/2,h*0.66);
+
+            ctx.fillStyle='rgba(255,255,255,0.7)';
+            ctx.font='14px Georgia,serif';
+            ctx.fillText('Toque para voltar ao menu',w/2,h*0.78);
+
+            // linha de baixo
+            ctx.strokeStyle='rgba(201,162,39,0.35)';
+            ctx.beginPath();
+            ctx.moveTo(w*0.3,h*0.72);
+            ctx.lineTo(w*0.7,h*0.72);
+            ctx.stroke();
+            return;
+          }
 
           if(['present_heros','story','meeting','friends','tower'].includes(gameState)){
             const d=dialogs[dialogIndex];
