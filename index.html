@@ -40,18 +40,25 @@
       const canvas=document.getElementById('gameCanvas');
       const ctx=canvas.getContext('2d');
 
+      const isMobile=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
+
       function resizeCanvas(){
         const vw=window.visualViewport?window.visualViewport.width:window.innerWidth;
         const vh=window.visualViewport?window.visualViewport.height:window.innerHeight;
-        canvas.width=Math.floor(vw);
-        canvas.height=Math.floor(vh);
+        // mobile desenha 85% dos pixels (mais leve) e estica na tela
+        const scale=isMobile?0.85:1;
+        canvas.width=Math.floor(vw*scale);
+        canvas.height=Math.floor(vh*scale);
+        canvas.style.width=vw+'px';
+        canvas.style.height=vh+'px';
       }
       resizeCanvas();
       window.addEventListener('resize',resizeCanvas);
       if(window.visualViewport)window.visualViewport.addEventListener('resize',resizeCanvas);
 
-      const isMobile=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
       if(isMobile)document.getElementById('mobileControls').style.display='block';
+
+      const MAX_PARTICLES=isMobile?40:120;
 
       const SPRITE_PATH='cavaleiro_sprites/';
       const sprites={},portraits={},friendSprites={};
@@ -139,7 +146,7 @@
         sfxFire.volume=0.4;
       }
 
-            function stopBgm(){
+      function stopBgm(){
         if(bgm){try{bgm.pause();bgm.currentTime=0}catch(e){}}
         bgm=null;currentBgmKey='';
       }
@@ -154,6 +161,7 @@
         currentBgmKey=key;
         a.volume=BGM_VOL[key]||0.3;
         a.currentTime=0;
+        if(!audioUnlocked)return; // espera o 1º toque
         a.play().catch(()=>{});
       }
 
@@ -204,6 +212,11 @@
         if(['title','menu','dead'].includes(gameState))stopBgm();
       }
 
+      function addParticle(p){
+        particles.push(p);
+        if(particles.length>MAX_PARTICLES)particles.splice(0,particles.length-MAX_PARTICLES);
+      }
+
       function playSwordSfx(){
         const s=sfxSwordPool.find(a=>a.paused||a.ended)||sfxSwordPool[0];
         if(!s)return;
@@ -223,6 +236,29 @@
             sfxFireTimer=null;
           },2000);
         }catch(e){}
+      }
+
+      let audioUnlocked=false;
+
+      function unlockAudio(){
+        if(audioUnlocked)return;
+        audioUnlocked=true;
+        // “acorda” todos os Audios com volume 0
+        const list=[];
+        for(const k in bgmTracks)if(bgmTracks[k])list.push(bgmTracks[k]);
+        sfxSwordPool.forEach(s=>list.push(s));
+        if(sfxFire)list.push(sfxFire);
+        if(roarAudio)list.push(roarAudio);
+        list.forEach(a=>{
+          try{
+            const v=a.volume;
+            a.volume=0;
+            a.play().then(()=>{a.pause();a.currentTime=0;a.volume=v}).catch(()=>{a.volume=v});
+          }catch(e){}
+        });
+        // tenta a BGM certa na hora
+        currentBgmKey='';
+        updateBgm();
       }
 
       const animConfig={
@@ -831,7 +867,10 @@
         ];
       }
 
-      function startNewGame(){dialogIndex=0;gameState='present_heros';skipBtn.style.display='none'}
+      function startNewGame(){
+        unlockAudio();
+        dialogIndex=0;gameState='present_heros';skipBtn.style.display='none';
+      }
 
       const dialogs=[
         {type:'present',speaker:'Heros',portrait:'heros',text:'Este é você: Heros, um guerreiro forte e destemido. Seu vilarejo foi destruído por monstros poderosos que conseguiram romper o selo da torre. Você e seus amigos estavam explorando a floresta e, por um milagre, sobreviveram. Porém, perderam a família e o lar. Nenhum de vocês jamais superou esse trauma. E você prometeu vingança.'},
@@ -1098,6 +1137,9 @@
         else if(f.type==='late'||f.type==='garden'){totalToSpawn=f.count;killsNeeded=f.count;maxConcurrent=5}
         else if(f.type==='mirror'){totalToSpawn=f.count;killsNeeded=f.count;maxConcurrent=3}
         else{totalToSpawn=killsNeeded;maxConcurrent=Math.min(6,killsNeeded)}
+
+        if(isMobile)maxConcurrent=Math.min(maxConcurrent,4);
+
         spawnQueue=totalToSpawn;spawnTimer=0;
         const initial=Math.min(maxConcurrent,spawnQueue);
         for(let i=0;i<initial;i++){spawnOneEnemy();spawnQueue--}
@@ -2011,25 +2053,29 @@
       skipBtn.addEventListener('touchstart',e=>{e.preventDefault();forceSkipFloor()},{passive:false});
       window.addEventListener('keydown',e=>{
         keys[e.code]=true;
+
         if(e.code==='Space'){e.preventDefault();if(gameState==='playing')togglePause();else if(gameState==='floor_transition')applyNextFloor();else if(gameState!=='floor_clear'&&gameState!=='menu')onAdvance()}
         if(e.code==='Enter'||e.code==='KeyZ'){if(gameState==='floor_transition')applyNextFloor();else if(gameState!=='floor_clear'&&gameState!=='menu')onAdvance()}
       });
+
       window.addEventListener('keyup',e=>keys[e.code]=false);
-      canvas.addEventListener('mousedown',e=>{
+
+     canvas.addEventListener('mousedown',e=>{
         e.preventDefault();
+        unlockAudio();
         const rect=canvas.getBoundingClientRect();const mx=e.clientX-rect.left,my=e.clientY-rect.top;
         if(gameState==='menu'){menuButtons.forEach(b=>{if(!b.disabled&&hitButton(mx,my,b))b.action()});return}
-
         if(gameState==='playing'&&isPaused){pauseButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
-
         if(gameState==='dead'){deathButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
         if(gameState==='floor_transition'){if(hitButton(mx,my,transitionBtn))applyNextFloor();return}
         if(gameState==='floor_clear')return;
-
         if(['present_heros','story','meeting','friends','tower','post10','post50','post60','post80','post93','post96','pre_rescue','rescue','tempestas_dialog','post_tempestas','ignis_dialog','post_ignis','typhon_dialog','phase2_dialog','phase3_dialog','final_dialog','victory'].includes(gameState)){onAdvance();return}
-
         if(gameState==='playing'&&!isPaused){if(e.button===0)mouse.left=true;if(e.button===2)mouse.right=true}
       });
+
+      canvas.addEventListener('touchstart',e=>{
+        unlockAudio();
+      },{passive:true});
 
       canvas.addEventListener('mouseup',e=>{if(e.button===0)mouse.left=false;if(e.button===2)mouse.right=false});
       canvas.addEventListener('contextmenu',e=>e.preventDefault());
@@ -2493,6 +2539,8 @@
 
         updateBgm();
         syncMobileControls();
+
+        if(particles.length>MAX_PARTICLES)particles.splice(0,particles.length-MAX_PARTICLES);
 
         if(gameState==='title'){titleTimer++;if(titleTimer>90){titleAlpha-=0.012;if(titleAlpha<=0){titleAlpha=0;hasSave=checkSaveExists();gameState='menu';setupMenuButtons()}}return}
 
