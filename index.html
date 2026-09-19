@@ -45,10 +45,8 @@
       function resizeCanvas(){
         const vw=window.visualViewport?window.visualViewport.width:window.innerWidth;
         const vh=window.visualViewport?window.visualViewport.height:window.innerHeight;
-        // mobile desenha 85% dos pixels (mais leve) e estica na tela
-        const scale=isMobile?0.85:1;
-        canvas.width=Math.floor(vw*scale);
-        canvas.height=Math.floor(vh*scale);
+        canvas.width=Math.floor(vw);
+        canvas.height=Math.floor(vh);
         canvas.style.width=vw+'px';
         canvas.style.height=vh+'px';
       }
@@ -241,24 +239,35 @@
       let audioUnlocked=false;
 
       function unlockAudio(){
-        if(audioUnlocked)return;
+        if(window.__audioUnlocked)return;
+        window.__audioUnlocked=true;
         audioUnlocked=true;
-        // “acorda” todos os Audios com volume 0
+
         const list=[];
-        for(const k in bgmTracks)if(bgmTracks[k])list.push(bgmTracks[k]);
-        sfxSwordPool.forEach(s=>list.push(s));
-        if(sfxFire)list.push(sfxFire);
-        if(roarAudio)list.push(roarAudio);
+        try{
+          for(const k in bgmTracks)if(bgmTracks[k])list.push(bgmTracks[k]);
+        }catch(e){}
+        try{if(sfxSwordPool&&sfxSwordPool.length)sfxSwordPool.forEach(s=>list.push(s))}catch(e){}
+        try{if(sfxFire)list.push(sfxFire)}catch(e){}
+        try{if(roarAudio)list.push(roarAudio)}catch(e){}
+
         list.forEach(a=>{
           try{
-            const v=a.volume;
-            a.volume=0;
-            a.play().then(()=>{a.pause();a.currentTime=0;a.volume=v}).catch(()=>{a.volume=v});
+            a.muted=false;
+            a.playsInline=true;
+            a.setAttribute('playsinline','');
+            a.setAttribute('webkit-playsinline','');
+            const p=a.play();
+            if(p&&p.catch)p.catch(()=>{});
           }catch(e){}
         });
-        // tenta a BGM certa na hora
+
+        // para tudo que “acordou” e toca a BGM certa
+        list.forEach(a=>{
+          try{if(a!==bgm){a.pause();a.currentTime=0}}catch(e){}
+        });
         currentBgmKey='';
-        updateBgm();
+        try{updateBgm()}catch(e){}
       }
 
       const animConfig={
@@ -3161,6 +3170,19 @@
         gameState='title';titleAlpha=1;titleTimer=0;dialogIndex=0;
         gameLoop();
       });
+
+       // === libera áudio no 1º toque (mobile) ===
+      (function(){
+        const once=()=>{
+          unlockAudio();
+          window.removeEventListener('touchstart',once,true);
+          window.removeEventListener('mousedown',once,true);
+          window.removeEventListener('click',once,true);
+        };
+        window.addEventListener('touchstart',once,true);
+        window.addEventListener('mousedown',once,true);
+        window.addEventListener('click',once,true);
+      })();
 
    </script>
  </body>
