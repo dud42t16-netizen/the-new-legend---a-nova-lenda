@@ -151,16 +151,27 @@
 
       function playBgm(key){
         if(!key){stopBgm();return}
-        if(currentBgmKey===key&&bgm&&!bgm.paused)return;
-        stopBgm();
         const a=bgmTracks[key];
         if(!a)return;
+        // mesma faixa já tocando → não mexe
+        if(currentBgmKey===key&&bgm===a&&!a.paused)return;
+
+        // pausa a anterior SEM resetar a que vamos tocar
+        if(bgm&&bgm!==a){
+          try{bgm.pause()}catch(e){}
+        }
+
         bgm=a;
         currentBgmKey=key;
+        audioUnlocked=true;
+        window.__audioUnlocked=true;
         a.volume=BGM_VOL[key]||0.3;
-        a.currentTime=0;
-        if(!audioUnlocked)return; // espera o 1º toque
-        a.play().catch(()=>{});
+        try{a.playsInline=true}catch(e){}
+        // NÃO zera currentTime se já estiver no começo e for o 1º play no gesto —
+        // só reinicia quando troca de faixa
+        try{if(a.currentTime>0.2)a.currentTime=0}catch(e){}
+        const p=a.play();
+        if(p&&p.catch)p.catch(()=>{});
       }
 
       function updateBgm(){
@@ -879,6 +890,9 @@
       function startNewGame(){
         unlockAudio();
         dialogIndex=0;gameState='present_heros';skipBtn.style.display='none';
+        audioUnlocked=true;
+        window.__audioUnlocked=true;
+        playBgm('old_tower');
       }
 
       const dialogs=[
@@ -1163,9 +1177,10 @@
         const maxH=Math.min(canvas.height*0.22,120);
         const img=tempestasSp;const dw=img?img.width*(maxH/img.height):80;
 
-        boss={x:(canvas.width-dw)/2,y:18,w:dw,h:maxH,hp:670,maxHp:670,shootCd:90,phase:0,phaseTimer:0,anim:0,kind:'tempestas'};
-        bossProjectiles=[];groundMarks=[];allyShootTimer=600;openingDone=false;openingWait=0;
+        boss={x:(canvas.width-dw)/2,y:18,w:dw,h:maxH,hp:670,maxHp:670,shootCd:40,phase:2,phaseTimer:0,anim:0,kind:'tempestas'};
+        bossProjectiles=[];groundMarks=[];allyShootTimer=600;openingDone=true;openingWait=0;
         lucianBalloon=null;lioraBalloon=null;valeriaBalloon=null;
+        // phase 2 + openingDone: ataca desde o início do andar (sem esperar o jogador)
 
       }
 
@@ -1845,6 +1860,7 @@
         
         if(pendingSpecial==='after_typhon_final'){
           pendingSpecial=null;bossFallText='';
+          stopBgm(); // fim do andar 100 / Typhon
           finalDialogIndex=0;
           gameState='final_dialog';
           skipBtn.style.display='none';
@@ -1898,6 +1914,19 @@
         gameState='floor_transition';
       }
 
+
+      // BGM no gesto do botão (mobile)
+      function syncBgmOnFloorAdvance(){
+        // floorIndex já atualizado
+        if(floorIndex<=13){playBgm('battlethemeA');return}
+        // após 50 (índices 14–16 = 60–80) → boss3; ao sair do 50 já boss3
+        if(floorIndex<=16){playBgm('boss3');return}
+        // após 80 (índice 17+) até 97 → boss2
+        if(floorIndex<=24){playBgm('boss2');return}
+        // 98+ → boss
+        playBgm('boss');
+      }
+
       function applyNextFloor(){
         floorIndex=pendingFloorIndex;
         const f=currentFloorData();
@@ -1917,6 +1946,7 @@
         player.state='parado';player.frame=0;player.attackCooldown=0;player.fireCooldown=0;player.slashTimer=0;player.invincible=45;
         transitionBtn=null;setupFloorSpawn();
         if(gameState!=='tempestas_dialog'&&gameState!=='ignis_dialog'){gameState='playing';skipBtn.style.display='block'}
+        syncBgmOnFloorAdvance();
       }
 
       function forceSkipFloor(){
@@ -1954,7 +1984,6 @@
       function togglePause(){if(gameState!=='playing')return;isPaused=!isPaused;if(isPaused)setupPauseButtons()}
 
       function hitButton(mx,my,btn){return btn&&mx>=btn.x&&mx<=btn.x+btn.w&&my>=btn.y&&my<=btn.y+btn.h}
-
       function onAdvance(){
         if(['present_heros','story','meeting','friends','tower'].includes(gameState)){advanceDialog();return}
 
@@ -2037,6 +2066,7 @@
 
         if(gameState==='final_dialog'){
           finalDialogIndex++;
+          if(finalDialogIndex===23)playBgm('towntheme'); // gesto ao avançar na fala do Lucian
           if(finalDialogIndex>=finalDialogs.length){
             gameState='victory';
             skipBtn.style.display='none';
