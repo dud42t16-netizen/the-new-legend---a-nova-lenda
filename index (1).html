@@ -151,16 +151,27 @@
 
       function playBgm(key){
         if(!key){stopBgm();return}
-        if(currentBgmKey===key&&bgm&&!bgm.paused)return;
-        stopBgm();
         const a=bgmTracks[key];
         if(!a)return;
+        // mesma faixa já tocando → não mexe
+        if(currentBgmKey===key&&bgm===a&&!a.paused)return;
+
+        // pausa a anterior SEM resetar a que vamos tocar
+        if(bgm&&bgm!==a){
+          try{bgm.pause()}catch(e){}
+        }
+
         bgm=a;
         currentBgmKey=key;
+        audioUnlocked=true;
+        window.__audioUnlocked=true;
         a.volume=BGM_VOL[key]||0.3;
-        a.currentTime=0;
-        if(!audioUnlocked)return; // espera o 1º toque
-        a.play().catch(()=>{});
+        try{a.playsInline=true}catch(e){}
+        // NÃO zera currentTime se já estiver no começo e for o 1º play no gesto —
+        // só reinicia quando troca de faixa
+        try{if(a.currentTime>0.2)a.currentTime=0}catch(e){}
+        const p=a.play();
+        if(p&&p.catch)p.catch(()=>{});
       }
 
       function updateBgm(){
@@ -879,7 +890,9 @@
       function startNewGame(){
         unlockAudio();
         dialogIndex=0;gameState='present_heros';skipBtn.style.display='none';
-        playBgm('old_tower'); // gesto do Novo Jogo → mobile libera
+        audioUnlocked=true;
+        window.__audioUnlocked=true;
+        playBgm('old_tower');
       }
 
       const dialogs=[
