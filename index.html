@@ -45,10 +45,14 @@
       function resizeCanvas(){
         const vw=window.visualViewport?window.visualViewport.width:window.innerWidth;
         const vh=window.visualViewport?window.visualViewport.height:window.innerHeight;
-        canvas.width=Math.floor(vw);
-        canvas.height=Math.floor(vh);
+        // nitidez mobile (Retina) — sem reduzir qualidade
+        const dpr=Math.min(window.devicePixelRatio||1, 2);
+        canvas.width=Math.floor(vw*dpr);
+        canvas.height=Math.floor(vh*dpr);
         canvas.style.width=vw+'px';
         canvas.style.height=vh+'px';
+        ctx.imageSmoothingEnabled=true;
+        try{ctx.imageSmoothingQuality='high'}catch(e){}
       }
       resizeCanvas();
       window.addEventListener('resize',resizeCanvas);
@@ -116,12 +120,12 @@
         monsterSprites.elfa=await loadImage(MONSTER_PATH+'elfa_maga_feminina_walk.png')||await loadImage('elfa_maga_feminina_walk.png');
 
         const bgmFiles={
-          old_tower:'old_tower.wav',
-          battlethemeA:'battlethemeA.wav',
+          old_tower:'old_tower.mp3',
+          battlethemeA:'battlethemeA.mp3',
           boss3:'boss3.wav',
           boss2:'boss2.wav',
           boss:'boss.wav',
-          towntheme:'towntheme.wav'
+          towntheme:'towntheme.mp3'
         };
         for(const n in bgmFiles){
           const a=new Audio(BGM_PATH+bgmFiles[n]);
@@ -495,7 +499,7 @@
           lucianBalloon=null;lioraBalloon=null;valeriaBalloon=null;openingDone=false;openingWait=0;heat=0;
           damageBuff=0;damageBuffTimer=0;lucianHealedOnce=false;reflectWindow=0;
           ignisDown=false;ignisDownDamage=0;ignisOnFire=false;ignisFireTimer=0;lioraBuffGiven=false;
-          partyAllies=[];flameParticles=[];isPaused=false;skipBtn.style.display='block';
+          partyAllies=[];flameParticles=[];isPaused=false;// skipBtn.style.display='block' // botão pular andar desligado;
           setupFloorSpawn();gameState='playing';return true;
         }catch(e){return false}
       }
@@ -1129,7 +1133,7 @@
         tempestasDialogIndex=0;postTempestasIndex=0;ignisDialogIndex=0;postIgnisIndex=0;
         dragonMode='both';dragonStun=0;dragonGrab=0;floorCracks=[];
         transitionBtn=null;pendingSpecial=null;post96Step=0;rescueStep=0;
-        skipBtn.style.display='block';
+        // skipBtn.style.display='block' // botão pular andar desligado;
         setupFloorSpawn();
       }
 
@@ -1170,7 +1174,7 @@
 
       function startTempestasBattle(){
 
-        gameState='playing';skipBtn.style.display='block';
+        gameState='playing';// skipBtn.style.display='block' // botão pular andar desligado;
         setupPartyAllies();
         player.maxHp=10+floorIndex*10;player.hp=player.maxHp;
         player.x=canvas.width/2-player.size/2;player.y=canvas.height*0.45;player.invincible=0;
@@ -1186,7 +1190,7 @@
 
       function startIgnisBattle(){
 
-        gameState='playing';skipBtn.style.display='block';
+        gameState='playing';// skipBtn.style.display='block' // botão pular andar desligado;
         setupPartyAllies();
         player.maxHp=10+floorIndex*10;player.hp=player.maxHp;
         player.x=canvas.width/2-player.size/2;player.y=canvas.height*0.55;player.invincible=0;
@@ -1211,7 +1215,7 @@
       }
 
       function startDragonBattle(){
-        gameState='playing';skipBtn.style.display='block';
+        gameState='playing';// skipBtn.style.display='block' // botão pular andar desligado;
         setupPartyAllies();
         player.maxHp=10+floorIndex*10;player.hp=player.maxHp;
         player.x=canvas.width/2-player.size/2;player.y=canvas.height*0.62;player.invincible=40;
@@ -1260,7 +1264,7 @@
         dragonPhase=2;
         phase2Shot=null;
         phase2ShotCd=40; // pequeno delay antes do primeiro tiro
-        skipBtn.style.display='block';
+        // skipBtn.style.display='block' // botão pular andar desligado;
         lioraBalloon=null;
       }
 
@@ -1317,7 +1321,7 @@
         lioraBalloon={text:'Cuidado, Heros! Ele ficou mais resistente!',timer:320};
         valeriaBalloon={text:'A barreira está de pé! Vamos!',timer:160};
         lucianBalloon=null;
-        skipBtn.style.display='block';
+        // skipBtn.style.display='block' // botão pular andar desligado;
       }
 
       function drawThroneBg(){
@@ -1945,7 +1949,8 @@
         player.x=canvas.width/2-player.size/2;player.y=canvas.height/2-player.size/2;
         player.state='parado';player.frame=0;player.attackCooldown=0;player.fireCooldown=0;player.slashTimer=0;player.invincible=45;
         transitionBtn=null;setupFloorSpawn();
-        if(gameState!=='tempestas_dialog'&&gameState!=='ignis_dialog'){gameState='playing';skipBtn.style.display='block'}
+        if(gameState!=='tempestas_dialog'&&gameState!=='ignis_dialog'){gameState='playing';// skipBtn.style.display='block' // botão pular andar desligado
+        }
         syncBgmOnFloorAdvance();
       }
 
@@ -2102,7 +2107,7 @@
      canvas.addEventListener('mousedown',e=>{
         e.preventDefault();
         unlockAudio();
-        const rect=canvas.getBoundingClientRect();const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+        const rect=canvas.getBoundingClientRect();const mx=(e.clientX-rect.left)*(canvas.width/rect.width),my=(e.clientY-rect.top)*(canvas.height/rect.height);
         if(gameState==='menu'){menuButtons.forEach(b=>{if(!b.disabled&&hitButton(mx,my,b))b.action()});return}
         if(gameState==='playing'&&isPaused){pauseButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
         if(gameState==='dead'){deathButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
@@ -2130,7 +2135,7 @@
       document.getElementById('pauseBtn').addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();if(gameState==='playing')togglePause()},{passive:false});
       canvas.addEventListener('touchstart',e=>{
         e.preventDefault();
-        const t=e.changedTouches[0];const rect=canvas.getBoundingClientRect();const mx=t.clientX-rect.left,my=t.clientY-rect.top;
+        const t=e.changedTouches[0];const rect=canvas.getBoundingClientRect();const mx=(t.clientX-rect.left)*(canvas.width/rect.width),my=(t.clientY-rect.top)*(canvas.height/rect.height);
         if(gameState==='menu'){menuButtons.forEach(b=>{if(!b.disabled&&hitButton(mx,my,b))b.action()});return}
         if(gameState==='playing'&&isPaused){pauseButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
         if(gameState==='dead'){deathButtons.forEach(b=>{if(hitButton(mx,my,b))b.action()});return}
@@ -3042,8 +3047,8 @@
 
             ctx.fillStyle='#ffffff';
             ctx.font='16px Georgia,serif';
-            ctx.fillText('Heros e seus amigos trouxeram a paz.',w/2,h*0.52);
-            ctx.fillText('O mundo pode enfim prosperar.',w/2,h*0.56);
+            ctx.fillText('Você e seus amigos trouxeram a paz.',w/2,h*0.52);
+            ctx.fillText('O mundo pode prosperar.',w/2,h*0.56);
 
             ctx.fillStyle='#c9a227';
             ctx.font='italic 17px Georgia,serif';
