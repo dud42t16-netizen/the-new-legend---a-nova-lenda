@@ -116,12 +116,12 @@
         monsterSprites.elfa=await loadImage(MONSTER_PATH+'elfa_maga_feminina_walk.png')||await loadImage('elfa_maga_feminina_walk.png');
 
         const bgmFiles={
-          old_tower:'old_tower.mp3',
-          battlethemeA:'battlethemeA.mp3',
+          old_tower:'old_tower.wav',
+          battlethemeA:'battlethemeA.wav',
           boss3:'boss3.wav',
           boss2:'boss2.wav',
           boss:'boss.wav',
-          towntheme:'towntheme.mp3'
+          towntheme:'towntheme.wav'
         };
         for(const n in bgmFiles){
           const a=new Audio(BGM_PATH+bgmFiles[n]);
@@ -3043,7 +3043,7 @@
             ctx.fillStyle='#ffffff';
             ctx.font='16px Georgia,serif';
             ctx.fillText('Heros e seus amigos trouxeram a paz.',w/2,h*0.52);
-            ctx.fillText('O selo foi selado. O mundo pode respirar.',w/2,h*0.56);
+            ctx.fillText('O mundo pode enfim prosperar.',w/2,h*0.56);
 
             ctx.fillStyle='#c9a227';
             ctx.font='italic 17px Georgia,serif';
